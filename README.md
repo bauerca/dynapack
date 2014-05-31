@@ -1,4 +1,4 @@
-![Logo](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/logo.png)
+![Logo](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/logo.png)
 
 Dynapack reduces the headache of bundling web apps that want *dynamic*,
 asynchronous module loading (yes, this is actually different from RequireJS,
@@ -73,7 +73,7 @@ A modern javascript-heavy web app consists of a bunch of javascript files
 CommonJS (Node, Browserify) or AMD (RequireJS). Such an app can be modeled as a
 dependency tree, which we'll represent as this big triangle:
 
-![All modules](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/all-modules.png)
+![All modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/all-modules.png)
 
 All the modules needed by the app are contained within the triangle.
 At the root of the tree is the entry point to the app, probably a router of
@@ -89,7 +89,7 @@ is used only in a few pages of an app.  In this case, the developer might wish
 to exclude it from the main app bundle and have the client download it only
 when they need it. Using the triangle, we might illustrate this as such:
 
-![Exclude bundle](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/exclude.png)
+![Exclude bundle](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/exclude.png)
 
 Now the isolated triangle is not downloaded with the main bundle, which has decreased in
 size to the trapezoid thingy.
@@ -101,7 +101,7 @@ custom modules, each of which depends on jQuery. To visualize, the following
 two paths through the dependency graph could get to the excluded bundle in the
 above figure:
 
-![It's a graph](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/graph.png)
+![It's a graph](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/graph.png)
 
 Great. Now let's go crazy with bundle-splitting to see how we can *minimize*
 initial page load times (we should mention that the necessity for snappy
@@ -113,24 +113,24 @@ Suppose that the following green triangle at the root of the graph comprises
 those modules common to *all* pages of the app. This group of modules should
 *always* be downloaded.
 
-![Root bundle](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/main.png)
+![Root bundle](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/main.png)
 
 Now suppose that page 1 of the app uses the modules enclosed by both sub-triangles
 in the following figure
 
-![Page 1 modules](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/page1.png)
+![Page 1 modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/page1.png)
 
 where the *entry point* to the page-1-specific modules is the root of the
 red (lower-left) sub-triangle. Page 2 has its own similarly-visualized set
 of modules.
 
-![Page 2 modules](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/page2.png)
+![Page 2 modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/page2.png)
 
 At this point, it might seem reasonable to make three bundles, one for each
 triangle. However, we see that after a client visits *both* pages, they
 have traversed the following modules
 
-![Page 1 & 2 modules](https://raw.githubusercontent.com/bauerca/dyna-pack/master/assets/page1and2.png)
+![Page 1 & 2 modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/page1and2.png)
 
 which is the union of the modules needed to display pages 1 and 2,
 individually. Surely, we shouldn't download the same modules twice! A fourth
