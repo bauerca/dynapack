@@ -5,25 +5,26 @@ var browserResolve = require('browser-resolve');
 var browserPack = require('browser-pack');
 var through2 = require('through2');
 var resolve = require('resolve');
-//var detective = require('detective');
 var fs = require('fs');
 var path = require('path');
 var extend = require('xtend');
 var async = require('async');
 var _ = require('underscore');
-var encodeBits = require('./encode-bits');
-var Transform = require('./transform');
+var encodeBits = require('./lib/encode-bits');
+var Transform = require('./lib/transform');
 //var JSONStream = require('JSONStream');
 
 
-function ComboPack(entry, opts) {
+function DynaPack(entry, opts) {
   var self = this;
 
   self.opts = extend(
     {
       modules: [],
-      dynamicLabels: 'dynamod',
-      builtins: builtins
+      dynamicLabels: 'js',
+      builtins: builtins,
+      output: './chunks',
+      prefix: '/' // needs trailing slash!
     },
     opts
   );
@@ -63,7 +64,7 @@ function ComboPack(entry, opts) {
   self.moduleCount = 0;
 }
 
-ComboPack.prototype.run = function(callback) {
+DynaPack.prototype.run = function(callback) {
   var self = this;
   this.processEntry(self.entry, function() {
     self.pack();
@@ -72,7 +73,7 @@ ComboPack.prototype.run = function(callback) {
 };
 
 
-ComboPack.prototype.chunkId = function(module) {
+DynaPack.prototype.chunkId = function(module) {
   //console.log('chunk id for', module);
   return encodeBits(module.entries, 32);
 };
@@ -99,7 +100,7 @@ ComboPack.prototype.chunkId = function(module) {
  *    var blah = '/user/name/project/node_modules/blah/index.js';
  *
  */
-ComboPack.prototype.processModule = function(module, entryIndex, callback) {
+DynaPack.prototype.processModule = function(module, entryIndex, callback) {
   var id = module.id;
 
   if (id in this.modules) {
@@ -154,7 +155,7 @@ ComboPack.prototype.processModule = function(module, entryIndex, callback) {
  *  Find all dynamic dependencies in module source and add to 'dynamic'
  *  property on module.
  */
-ComboPack.prototype.findDynamic = function(module, callback) {
+DynaPack.prototype.findDynamic = function(module, callback) {
   var match;
   var matches = [];
 
@@ -207,7 +208,7 @@ ComboPack.prototype.findDynamic = function(module, callback) {
  *  @param {Object<String, Module>} have The modules the "client" has.
  *
  */
-ComboPack.prototype._dynDeps = function(have) {
+DynaPack.prototype._dynDeps = function(have) {
   var self = this;
   var deps = {};
   var moduleId;
@@ -231,7 +232,7 @@ ComboPack.prototype._dynDeps = function(have) {
  *  @param {String} need The id of the module needed by the "client."
  *  @param {Function} callback
  */
-ComboPack.prototype.processEntry = function(entry, callback) {
+DynaPack.prototype.processEntry = function(entry, callback) {
   var self = this;
 
   // Add entry point to set of followed.
@@ -281,10 +282,10 @@ ComboPack.prototype.processEntry = function(entry, callback) {
 
 /**
  *  Generate a unique id for the given group of modules. Since groups
- *  are formed by calls to {@link ComboPack.fetch}, a group is identified
+ *  are formed by calls to {@link DynaPack.fetch}, a group is identified
  *  uniquely by its set of satisfied dynamic dependencies.
  */
-ComboPack.prototype.id = function(modules) {
+DynaPack.prototype.id = function(modules) {
   // Each entry is an index for a satisfied dynamic dependency.
   var indices = [];
   var ids = [];
@@ -299,7 +300,7 @@ ComboPack.prototype.id = function(modules) {
   return encodeBits(indices, 64);
 };
 
-ComboPack.prototype.bundleId = function(modules) {
+DynaPack.prototype.bundleId = function(modules) {
   var indices = [];
   for (var id in modules) {
     indices.push(modules[id].index);
@@ -364,11 +365,6 @@ ComboPack.prototype.bundleId = function(modules) {
  *       dependency. If all routes join, the module should *not* be isolated.
  *       Otherwise, isolate it.
  *       
- 
- shared Let's say w.x and w.y share
- *  some modules. When the client downloads the sequence w.x.y, they are
- *  downloading *four* bundles: w, w.x
- *
  */
 
 
@@ -377,7 +373,7 @@ ComboPack.prototype.bundleId = function(modules) {
  *  the module string in the source code of each module. Serious obfuscation here;
  *  errors after this point make debugging difficult.
  */
-ComboPack.prototype.reId = function() {
+DynaPack.prototype.reId = function() {
   var self = this;
   // First change dependencies.
   _.each(self.modules, function(module, id) {
@@ -446,7 +442,7 @@ ComboPack.prototype.reId = function() {
  *  information on the fly as modules are read from module-deps, but
  *  oh well.
  */
-ComboPack.prototype.requiredChunks = function(entryModuleId) {
+DynaPack.prototype.requiredChunks = function(entryModuleId) {
   var self = this;
   var entryIndex = self.entries.indexOf(entryModuleId);
   if (entryIndex === -1) {
@@ -466,11 +462,11 @@ ComboPack.prototype.requiredChunks = function(entryModuleId) {
 };
 
 
-ComboPack.prototype.wrapModule = function(module) {
+DynaPack.prototype.wrapModule = function(module) {
       // Should offer some transform API here like browserify.
   return (
     'function(module, exports, require) {' +
-    module.source +
+      module.source +
     '}'
   );
 };
@@ -478,7 +474,7 @@ ComboPack.prototype.wrapModule = function(module) {
 
 /**
  */
-ComboPack.prototype.wrapChunk = function(chunkId, modules) {
+DynaPack.prototype.wrapChunk = function(chunkId, modules) {
   var self = this;
   var modules = self.chunks[chunkId];
 
@@ -495,34 +491,52 @@ ComboPack.prototype.wrapChunk = function(chunkId, modules) {
 
   return (
     'dynapackChunkLoaded("' + chunkId + '", {' +
-    Object.keys(modules).map(function(moduleId) {
-      var module = modules[moduleId];
-      return '"' + moduleId + '":' + self.wrapModule(module);
-    }).join(',') + '},' +
+      Object.keys(modules).map(function(moduleId) {
+        return (
+          '"' + moduleId + '":' +
+          self.wrapModule(modules[moduleId])
+        );
+      }).join(',') + '},' +
     JSON.stringify(entries) +
     ');'
   );
 };
 
 /**
- *  Pack chunks for browser. The file name given to a chunk.
+ *  Pack chunks for browser.
  */
-ComboPack.prototype.pack = function() {
+DynaPack.prototype.pack = function() {
   var self = this;
   self.reId();
 
   var mainChunks = self.requiredChunks(self.entry);
-  var main = fs.readFileSync('./require.js') + '("' + self.entry + '");';
+  var main = (
+    fs.readFileSync(__dirname + '/lib/require.js') +
+    '("' + self.entry + '","' + self.opts.prefix + '");'
+  );
+
+  var output = self.opts.output;
+  try {
+    fs.mkdirSync(output);
+  } catch (e) {
+    if (!/EEXIST/.test(e.message)) {
+      throw e;
+    }
+  }
 
   _.each(self.chunks, function(modules, chunkId) {
     var chunk = self.wrapChunk(chunkId, modules);
     if (mainChunks.indexOf(chunkId) !== -1) {
       main += chunk;
     } else {
-      fs.writeFile(chunkId + '.js', chunk);
+      var file = path.join(output, chunkId + '.js');
+      fs.writeFile(file, chunk);
     }
   });
-  fs.writeFile('main.js', main);
+  fs.writeFile(
+    path.join(output, 'main.js'),
+    main
+  );
 };
 
 
@@ -531,6 +545,6 @@ module.exports = function(entry, opts, callback) {
     callback = opts;
     opts = undefined;
   }
-  var combopack = new ComboPack(entry, opts);
-  combopack.run(callback);
+  var dynapack = new DynaPack(entry, opts);
+  dynapack.run(callback);
 };
