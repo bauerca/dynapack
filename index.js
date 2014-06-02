@@ -8,7 +8,7 @@ var extend = require('xtend');
 var async = require('async');
 var _ = require('underscore');
 var encodeBits = require('./lib/encode-bits');
-var Transform = require('./lib/transform');
+//var Transform = require('./lib/transform');
 //var JSONStream = require('JSONStream');
 
 
@@ -41,9 +41,9 @@ function Dynapack(entry, opts) {
     ')\\s*\\*/', 'g'
   );
 
-  self.transform = Transform({
-    moduleLabel: labels[0]
-  });
+  //self.transform = Transform({
+  //  moduleLabel: labels[0]
+  //});
 
   self.entry = entry;
   self.modules = {};
