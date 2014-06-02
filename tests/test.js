@@ -1,13 +1,15 @@
-var combopack = require('../');
+var dynapack = require('../');
 var through = require('through2');
 var expect = require('expect.js');
 
-describe('combopack', function() {
-  it('should exclude repeats across bundles', function(done) {
+describe('dynapack', function() {
+  it('should produce 4 bundles from a dep diamond', function(done) {
     //var mods = [];
 
-    combopack(__dirname + '/a.js', function(chunks) {
+    var packer = dynapack(__dirname + '/diamond/a.js');
+    packer.run(function(chunks) { 
       console.log(JSON.stringify(chunks, null, 2));
+      expect(Object.keys(chunks).length).to.be(4);
       done();
     });
 
@@ -20,17 +22,6 @@ describe('combopack', function() {
     //    assert(mods.length === 3);
     //    done();
     //  });
-  });
-});
-
-xdescribe('dyna-fetch', function() {
-  //var fetch = require('../require')(require);
-  it('should work', function(done) {
-    fetch(['http', 'fs'], function(http, fs) {
-      expect(http.createServer).to.be.ok();
-      expect(fs.readFile).to.be.ok();
-      done();
-    });
   });
 });
 

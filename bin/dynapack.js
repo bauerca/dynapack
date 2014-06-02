@@ -1,4 +1,4 @@
-#!/bin/node
+#!/usr/bin/env node
 
 var argv = require('minimist')(process.argv.slice(2));
 var dynapack = require('../');
@@ -9,4 +9,7 @@ var opts = {
   output: path.join(path.dirname(entry), 'chunks')
 };
 
-dynapack(entry, opts);
+var packer = dynapack(entry, opts);
+packer.run(function() {
+  packer.write();
+});

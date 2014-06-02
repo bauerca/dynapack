@@ -1,10 +1,7 @@
 var mdeps = require('module-deps');
-var browserify = require('browserify');
 var builtins = require('browserify/lib/builtins');
 var browserResolve = require('browser-resolve');
-var browserPack = require('browser-pack');
 var through2 = require('through2');
-var resolve = require('resolve');
 var fs = require('fs');
 var path = require('path');
 var extend = require('xtend');
@@ -15,7 +12,11 @@ var Transform = require('./lib/transform');
 //var JSONStream = require('JSONStream');
 
 
-function DynaPack(entry, opts) {
+function Dynapack(entry, opts) {
+  if (!(this instanceof Dynapack)) {
+    return new Dynapack(entry, opts);
+  }
+
   var self = this;
 
   self.opts = extend(
@@ -64,16 +65,15 @@ function DynaPack(entry, opts) {
   self.moduleCount = 0;
 }
 
-DynaPack.prototype.run = function(callback) {
+Dynapack.prototype.run = function(callback) {
   var self = this;
   this.processEntry(self.entry, function() {
-    self.pack();
     callback && callback(self.chunks);
   });
 };
 
 
-DynaPack.prototype.chunkId = function(module) {
+Dynapack.prototype.chunkId = function(module) {
   //console.log('chunk id for', module);
   return encodeBits(module.entries, 32);
 };
@@ -100,7 +100,7 @@ DynaPack.prototype.chunkId = function(module) {
  *    var blah = '/user/name/project/node_modules/blah/index.js';
  *
  */
-DynaPack.prototype.processModule = function(module, entryIndex, callback) {
+Dynapack.prototype.processModule = function(module, entryIndex, callback) {
   var id = module.id;
 
   if (id in this.modules) {
@@ -155,7 +155,7 @@ DynaPack.prototype.processModule = function(module, entryIndex, callback) {
  *  Find all dynamic dependencies in module source and add to 'dynamic'
  *  property on module.
  */
-DynaPack.prototype.findDynamic = function(module, callback) {
+Dynapack.prototype.findDynamic = function(module, callback) {
   var match;
   var matches = [];
 
@@ -208,7 +208,7 @@ DynaPack.prototype.findDynamic = function(module, callback) {
  *  @param {Object<String, Module>} have The modules the "client" has.
  *
  */
-DynaPack.prototype._dynDeps = function(have) {
+Dynapack.prototype._dynDeps = function(have) {
   var self = this;
   var deps = {};
   var moduleId;
@@ -232,7 +232,7 @@ DynaPack.prototype._dynDeps = function(have) {
  *  @param {String} need The id of the module needed by the "client."
  *  @param {Function} callback
  */
-DynaPack.prototype.processEntry = function(entry, callback) {
+Dynapack.prototype.processEntry = function(entry, callback) {
   var self = this;
 
   // Add entry point to set of followed.
@@ -244,8 +244,8 @@ DynaPack.prototype.processEntry = function(entry, callback) {
   var newEntries = [];
 
   var mdepOpts = {
-    modules: self.builtins,
-    transform: self.transform
+    modules: self.builtins
+    //transform: self.transform
   };
 
   var depStream = mdeps(entry, mdepOpts).pipe(through2.obj(handle));
@@ -280,100 +280,13 @@ DynaPack.prototype.processEntry = function(entry, callback) {
 
 };
 
-/**
- *  Generate a unique id for the given group of modules. Since groups
- *  are formed by calls to {@link DynaPack.fetch}, a group is identified
- *  uniquely by its set of satisfied dynamic dependencies.
- */
-DynaPack.prototype.id = function(modules) {
-  // Each entry is an index for a satisfied dynamic dependency.
-  var indices = [];
-  var ids = [];
-  _.each(modules, function(module) {
-    if (module.entry) {
-      indices.push(module.index);
-      ids.push(module.id);
-    }
-  });
-  console.log('creating id for', ids);
-  // Encode array of ints to base32.
-  return encodeBits(indices, 64);
-};
-
-DynaPack.prototype.bundleId = function(modules) {
-  var indices = [];
-  for (var id in modules) {
-    indices.push(modules[id].index);
-  }
-  return encodeBits(indices, 64);
-};
-
-/**
- *  Given a client that has gone through the fetch sequence w.x.y,
- *  left the site, then returned and wants to fetch z, what bundles
- *  from the w.x.y fetch sequence should be loaded from the cache?
- *
- *  The bundle w.x.y.z will not contain modules already present in
- *  the bundles x, x.y, x.y.z. The downloaded bundle w.x.y.z should
- *  contain information on what previously downloaded bundles need to
- *  be loaded before it can run. Boom.
- *
- *  What if a previously downloaded bundle has been removed from the
- *  cache? Let's say w.x.y sequence has been downloaded (cached). On return,
- *  the client loads w, then wants to load z. Ideally (and usually), we
- *  would download w.x.y.z, b/c w.x and w.x.y are cached. But what if w.x has
- *  been busted? The sequence is broken. Must we start over from w (by
- *  downloading w.z)? Not
- *  necessarily; if bundle w.y is equivalent to w.x.y, then we can fetch
- *  w.y.z rather than w.z, and the cached bundle w.x.y (which is now renamed
- *  w.y) remains valid.
- *
- *  If we want to get really fancy, we can devise a strategy for CONVERTING
- *  w.x.y to w.y when we fetch w.y.z. To do this, we need to know which modules
- *  in w.x were common to w.y, and include those in the download of w.y.z.
- *  This correcting bundle might have the name w.x.y.-x.z, to indicate w.x was
- *  busted and we want to keep w.y.
- *
- *  Or we just break up all shared resources. Every module that has more than
- *  one dependent is shared. We only care about isolating a shared module that
- *  is shared across different dynamic dependencies.
- *
- *
- *  For example, where '/' is a static dep, and '.' is a dyn dep,
- *
- *            a
- *           / \
- *          b   c
- *           \ /
- *            d
- *
- *  In this case, d would *not* be isolated.
- *
- *            a
- *           . .
- *          b   c
- *           \ /
- *            d
- *
- *  However, in this case, we want to isolate d because it can be requested
- *  through more than one dynamic dependency.
- *
- *  What is the algirhtm that determines whether a shared dep should be
- *  isolated?
- *
- *    1. Start at the shared dep, find all routes back to their first dynamic
- *       dependency. If all routes join, the module should *not* be isolated.
- *       Otherwise, isolate it.
- *       
- */
-
 
 /**
  *  Change all ids from full path names to integer strings. This also changes
  *  the module string in the source code of each module. Serious obfuscation here;
  *  errors after this point make debugging difficult.
  */
-DynaPack.prototype.reId = function() {
+Dynapack.prototype.reId = function() {
   var self = this;
   // First change dependencies.
   _.each(self.modules, function(module, id) {
@@ -442,7 +355,7 @@ DynaPack.prototype.reId = function() {
  *  information on the fly as modules are read from module-deps, but
  *  oh well.
  */
-DynaPack.prototype.requiredChunks = function(entryModuleId) {
+Dynapack.prototype.requiredChunks = function(entryModuleId) {
   var self = this;
   var entryIndex = self.entries.indexOf(entryModuleId);
   if (entryIndex === -1) {
@@ -462,7 +375,7 @@ DynaPack.prototype.requiredChunks = function(entryModuleId) {
 };
 
 
-DynaPack.prototype.wrapModule = function(module) {
+Dynapack.prototype.wrapModule = function(module) {
       // Should offer some transform API here like browserify.
   return (
     'function(module, exports, require) {' +
@@ -474,7 +387,7 @@ DynaPack.prototype.wrapModule = function(module) {
 
 /**
  */
-DynaPack.prototype.wrapChunk = function(chunkId, modules) {
+Dynapack.prototype.wrapChunk = function(chunkId, modules) {
   var self = this;
   var modules = self.chunks[chunkId];
 
@@ -505,7 +418,7 @@ DynaPack.prototype.wrapChunk = function(chunkId, modules) {
 /**
  *  Pack chunks for browser.
  */
-DynaPack.prototype.pack = function() {
+Dynapack.prototype.write = function() {
   var self = this;
   self.reId();
 
@@ -539,12 +452,4 @@ DynaPack.prototype.pack = function() {
   );
 };
 
-
-module.exports = function(entry, opts, callback) {
-  if (callback === undefined && typeof opts === 'function') {
-    callback = opts;
-    opts = undefined;
-  }
-  var dynapack = new DynaPack(entry, opts);
-  dynapack.run(callback);
-};
+module.exports = Dynapack;

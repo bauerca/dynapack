@@ -1,0 +1,53 @@
+{
+  "name": "dynapack",
+  "version": "0.0.1",
+  "description": "A module bundler/loader for static and dynamic dependencies.",
+  "main": "index.js",
+  "bin": {
+    "dynapack": "./bin/dynapack.js"
+  },
+  "directories": {
+    "test": "tests",
+    "lib": "lib"
+  },
+  "dependencies": {
+    "browser-resolve": "~1.2.4",
+    "async": "~0.9.0",
+    "resolve": "~0.7.0",
+    "esprima": "~1.2.2",
+    "through2": "~0.4.2",
+    "module-deps": "~2.1.0",
+    "xtend": "~3.0.0",
+    "underscore": "~1.6.0",
+    "browserify": "^4.1.7",
+    "minimist": "^0.1.0"
+  },
+  "devDependencies": {
+    "expect.js": "~0.3.1",
+    "connect": "~3.0.0",
+    "parseurl": "~1.0.1",
+    "serve-static": "~1.2.0",
+    "dynafetch": "0.0.2"
+  },
+  "scripts": {
+    "test": "mocha -C tests/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/bauerca/dynapack.git"
+  },
+  "keywords": [
+    "bundle",
+    "loader",
+    "module",
+    "commonjs",
+    "dynamic",
+    "dependency"
+  ],
+  "author": "Carl A. Bauer",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bauerca/dynapack/issues"
+  },
+  "homepage": "https://github.com/bauerca/dynapack"
+}
