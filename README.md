@@ -16,6 +16,9 @@ two courses of action: (1) swap dynamic with static dependencies (or vice
 versa), or (2) use dynapack postprocessing options (TODO) to undo its work to
 your liking.
 
+Here is a [complete working example](https://github.com/bauerca/dynapack-example-simple)
+of dynapack.
+
 **This project and document are a work in progress. Consider it alpha-stage.
 Please contribute!**
 
@@ -119,7 +122,8 @@ whatever).
 
 ### Dynafetch
 
-Dynapack relies on [dynafetch](), a dead simple library that provides an
+Dynapack relies on [dynafetch](https://github.com/bauerca/dynafetch),
+a dead simple library that provides an
 asynchronous dependency loader similar to AMD-style `require`. Its usage is a
 little unsightly, but, as a result, it *just works* in Node:
 
