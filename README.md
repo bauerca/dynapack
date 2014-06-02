@@ -32,7 +32,7 @@ consider the dependency graph:
 This situation should lead to *4 bundles*. If a client possesses module **a** and
 requests **b**, it should receive **b** and **d**. However, if it instead
 requests **c**, it should receive **c** and **d**. Moreover, if a client requests
-**a** *then* **b**, the request for **b** should return *only* **b**.
+**b** *then* **c**, the request for **c** should return *only* **c**.
 
 This example is simplified for explanatory purposes. The RequireJS loader, in fact,
 does this, but on the *module* level. Dynapack handles the dynamic dependency diamond
