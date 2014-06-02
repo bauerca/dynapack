@@ -1,59 +1,139 @@
 ![Logo](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/logo.png)
 
-Dynapack reduces the headache of bundling web apps that want *dynamic*,
-asynchronous module loading (yes, this is actually different from RequireJS,
-webpack, and Browserify). Dynapack also helps you write apps isomorphically;
-modules written in the dynapack style *just work* when run in Node, and can be
-compiled for use in the browser (a la browserify) with goodies like automagic
-bundle-splitting and async bundle loading.
+Dynapack is a javascript module bundler and client-side bundle loader that
+solves the following problem. Given a dependency graph of *static* and
+*dynamic* dependencies, construct a set of module bundles such that
 
-**This project and document is a work in progress. Consider it alpha-stage.
+- the number of bundles is minimized,
+- each module exists in only one bundle,
+- a client request for a dynamic dependency, *D*, returns only the
+  static dependencies of *D* (recursively), and
+- a module (bundle) is sent to a client only once (per session).
+
+It should be noted that the solution for an app's graph may not provide the
+ideal set of bundles (whatever that measure may be). In this case, there are
+two courses of action: (1) swap dynamic with static dependencies (or vice
+versa), or (2) use dynapack postprocessing options (TODO) to undo its work to
+your liking.
+
+**This project and document are a work in progress. Consider it alpha-stage.
 Please contribute!**
-
-# In brief
-
-Here is the shortest explanation of dynapack and its principles we could
-muster. Please read [in depth](#in-depth) for a better understanding of the
-motives, purpose, and actual usage of this project.
-
-## Dynamic modules
-
-Dynapack introduces a new syntax called a *dynamic dependency declaration*
-(d<sup>3</sup>):
-
-```js
-var __m = './big-module' /*js*/;
-```
-
-where the important part of the above is the `'string' /*js*/` combination
-(I like to use the double underscore for the variable because of its
-similarity to `__filename` and `__dirname` in Node, but you can use whatever).
-
-A dynamic dependency declaration is simply a statement to a
-compiler/bundler/optimizer that the decorated string literal points to a
-dependency to be loaded asynchronously and only under conditions
-to be determined by the logic of the declaring module.
 
 ## Why?
 
-Because code bundling optimization must be done by hand when modules are
-loaded dynamically. Have a look at the [tutorial for a
-multipage app in requirejs](https://github.com/requirejs/example-multipage).
-This is more complicated than it needs to be. There are [similar
-steps](https://github.com/webpack/webpack/tree/master/examples/multiple-entry-points)
-required when using the impressive [webpack](http://webpack.github.io/) bundler
-under the CommonJS style.
+I couldn't find a bundler/loader that satisfies all the requirements listed above!
+Specifically, other bundlers are ignoring what I call the *dynamic dependency diamond*.
+What the heck is that? With dotted lines as dynamic dependencies, solid lines as
+static dependencies, and arrows pointing from dependent module to dependency,
+consider the dependency graph:
 
-This by-hand optimization is necessary because the r.js/webpack/browserify
-optimizers rely on parsing javascript for `require(...)` (or similar) calls.
-And if one of these `require(...)` calls has a *dynamic* dependency argument (a
-variable rather than a string literal), the optimizer skips the analysis of
-that dependency, and the developer is stuck with the cleanup.
+![Logo](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/diamond.png)
 
-However, with a dynamic dependency declaration, an optimizer can know about a
-dependency that is dynamic (hidden by a variable) and should be loaded
-asynchronously, and can optimize the bundling of an app accordingly and
-(hopefully) without intervention from the developer.
+This situation should lead to *4 bundles*. If a client possesses module **a** and
+requests **b**, it should receive **b** and **d**. However, if it instead
+requests **c**, it should receive **c** and **d**. Moreover, if a client requests
+**a** *then* **b**, the request for **b** should return *only* **b**.
+
+This example is simplified for explanatory purposes. The RequireJS loader, in fact,
+does this, but on the *module* level. Dynapack handles the dynamic dependency diamond
+in the general case on the *bundle* level to reduce server requests.
+
+
+# Audience
+
+At the moment, dynapack is for developers who prefer Node's CommonJS module
+system (which probably includes those developers building isomorphic web apps);
+modules written in dynapack syntax will *just run* under Node.
+In principle, nothing prevents support for other module systems like AMD; if
+the demand is there, the support will follow.
+
+Because Node disregards asynchronous module loading, a nonstandard technique
+was implemented which may further trim dynapack's audience. The following snippet
+is probably the most succinct description of the new technique; code like this
+*will* appear in modules written for dynapack:
+
+```js
+var fetch = require('dynafetch')(require); // Ugly. Oh well.
+
+var __m = './big-module' /*js*/; // This is a dynamic dependency declaration.
+
+// This resembles an async require in AMD.
+fetch([__m], function(m) {
+    // Do something with module m.
+});
+```
+
+# Dependency syntax
+
+The current version of dynapack supports only Node-style syntax for static
+dependencies and only [dynamic dependency
+declarations](#dynamic-dependency-declaration) with [dynafetch](#dynafetch) for
+dynamic dependencies. The following is a brief overview.
+
+## Static
+
+A static dependency is a dependency that exists at all times.
+It implies synchronous loading, and it suggests that the dependency should
+be delivered to a client along with the dependent module.
+
+The Node CommonJS style is supported, in which a static dependency is a simple
+`require` statement.
+
+```js
+var m = require('module');
+```
+
+If your app uses only this type of dependency, dynapack will function
+exactly like [Browserify](http://browserify.org/), and output a single
+bundle for your app. In this case, just use Browserify.
+
+## Dynamic
+
+Dynamic dependencies are dependencies that should be loaded/executed only under
+certain conditions. This type of dependency is relevant in the browser
+environment, where the downloading and execution of modules takes up precious
+time. A dynamic dependency that is not needed to display a page does not need
+to be downloaded, and therefore does not contribute to the page load wait.
+
+### Dynamic dependency declaration
+
+Dynapack supports a new syntax called a *dynamic dependency declaration* (d<sup>3</sup>):
+
+```js
+var __bm = './big-module' /*js*/;
+```
+
+where the important part of the above is the `<string> /*js*/` combination.  A
+d<sup>3</sup> informs dynapack that the decorated string literal is actually a
+dynamic dependency and may be passed to an asynchronous module-loading function
+(e.g. [dynafetch](#dynafetch) below).
+
+The advantage of a d<sup>3</sup> is that it is recognized *anywhere* in module
+code (whereas other bundlers recognize dependency strings only as arguments to
+`require` calls or similar, which binds the dependency name to the function
+call).
+
+(I like to use the double underscore for a d<sup>3</sup> variable because of
+its similarity to `__filename` and `__dirname` in Node, but you can use
+whatever).
+
+### Dynafetch
+
+Dynapack relies on [dynafetch](), a dead simple library that provides an
+asynchronous dependency loader similar to AMD-style `require`. Its usage is a
+little unsightly, but, as a result, it *just works* in Node:
+
+```js
+var fetch = require('dynafetch')(require);
+fetch(['module' /*js*/], function(m) {
+    // ...
+});
+```
+
+As implied by the above snippet, dynafetch is used with
+[d<sup>3</sup>s](#dynamic-dependency-declarations) because the variable name
+assigned to the dynafetch module is arbitrary and therefore cannot be reliably
+parsed by dynapack.
 
 
 # In depth
@@ -84,7 +164,7 @@ whole triangle) before the app is displayed in the browser. RequireJS (for
 AMD-style modules) and Browserify (for CommonJS-style modules) are the standard
 methods for packaging up a single bundle like this.
 
-Oftentimes, a module and its dependencies is pretty big chunk of javascript and
+Oftentimes, a module and its dependencies is a pretty big chunk of javascript and
 is used only in a few pages of an app.  In this case, the developer might wish
 to exclude it from the main app bundle and have the client download it only
 when they need it. Using the triangle, we might illustrate this as such:
@@ -133,12 +213,14 @@ have traversed the following modules
 ![Page 1 & 2 modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/page1and2.png)
 
 which is the union of the modules needed to display pages 1 and 2,
-individually. Surely, we shouldn't download the same modules twice! A fourth
+individually. Surely, we shouldn't download the same modules twice!
+
+A fourth
 bundle is suggested by the intersection of the modules specific to pages 1 and
 2 (the small purple triangle).  Now, when a client *initially* visits page 1,
 it downloads the green (top) triangle, red (left) trapezoid, and small (purple)
 triangle; and when it visits page 2, it downloads the green (top) triangle,
-blue (right) trapezoid, and small (purple) triangle.  Of course, if a client
+blue (right) trapezoid, and small (purple) triangle.  If a client
 has already visited page 1, it needs to download only the blue (right)
 trapezoid to display the page.
 
@@ -152,46 +234,6 @@ RequireJS or webpack, is formed by hand by the developer via a config file.
 Dynapack strives to assemble these common bundles (and manage the parallel
 downloading of them on the client) for you, because in reality, your dependency
 graph has many "common" bundles (small purple triangles).
-
-### RequireJS
-
-AMD provides dynamic module loading by allowing arbitrary expressions to
-be passed to calls to async requires; for example:
-
-```js
-var deps = ['./a', './b'];
-require(deps, function(a, b) {
-    // ...
-});
-```
-
-Unfortunately, in the above form, the
-[RequireJS optimizer](http://requirejs.org/docs/1.0/docs/optimization.html)
-can't pick up on modules `'./a'` and `'./b'`, so they won't be included in any
-bundles (they can still be fetched, but will be done so individually, not in
-a chunk). This can be changed by naming them as entry points in a config file, but
-now you've got your module names in two places, and that gets annoying to
-manage.
-
-## Usage
-
-Dynapack usage information.
-
-### Fetching dynamic modules
-
-A dynamic dependency implies asynchronous loading of that dependency (but,
-conversely, asynchronous loading of a dependency does *not* imply that the
-dependency is dynamic).
-
-You can't just make a d<sup>3</sup> and then `require(...)` it a couple lines
-later; that would defeat the entire purpose (and break your dynapack build).
-The understanding is that, when
-a dynamic dependency is needed, it will be fetched asynchronously,
-and that could take a while
-(of course, in Node, it shouldn't take any time at all, but in a browser...).
-
-Therefore, fetching requires a new syntax as well. Ideally, we would use an AMD
-require that takes a list of dependencies.
 
 
 ### Dynapack example
@@ -216,7 +258,7 @@ module.exports = function(path) {
 ```
 
 
-`home.js`: Page 2 requires jQuery and Backbone, statically.
+`home.js`: The homepage requires jQuery and Backbone, statically.
 
 ```js
 var $ = require('jquery');
@@ -224,11 +266,11 @@ var backbone = require('backbone');
 module.exports = '<h1>Homepage!</h1>';
 ```
 
-`not-found.js`: Page 1 requires jQuery, statically.
+`not-found.js`: The 404 page requires jQuery, statically.
 
 ```js
 var $ = require('jquery');
-module.exports = '<h1>Not found</h1>';
+module.exports = '<h1>404: Not found</h1>';
 ```
 
 *Without any configuration file*, running `dynapack ./main.js` will produce the
@@ -253,13 +295,7 @@ parallel.  If the url path *is* `/home`, it will download `1.js` and `3.js` in
 parallel.  If the client moves from a not found page to `/home`, only `3.js`
 will be downloaded because `1.js` is cached.
 
-### Isomorphism
 
-Isomorphic modules run on both the client and server (in the context of
-dynapack, the browser and node). Since you already compile your modules for the
-client (concatenation, minification), it makes sense to write node-first
-modules whenever possible. Node sticks to the simple CommonJS
-`require('module')`, so we want to work with that and avoid shims on the server
-side where we can.
+# License
 
-
+MIT
