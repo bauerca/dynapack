@@ -66,6 +66,23 @@ fetch([__m], function(m) {
 });
 ```
 
+# Installation
+
+```
+> npm install -g dynapack
+```
+
+# Usage
+
+```
+> dynapack ./entry.js
+```
+
+where `entry.js` is the entry point to the client-side version of your app. The
+bundles will be installed in a directory named `chunks/` which is created
+alongside `entry.js`. The script `chunks/main.js` should be included in your
+webpage; the `entry.js` module will run as soon as it is loaded.
+
 # Dependency syntax
 
 The current version of dynapack supports only Node-style syntax for static
