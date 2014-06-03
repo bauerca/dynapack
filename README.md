@@ -7,14 +7,15 @@ solves the following problem. Given a dependency graph of *static* and
 - the number of bundles is minimized,
 - each module exists in only one bundle,
 - a client request for a dynamic dependency, *D*, returns only the
-  static dependencies of *D* (recursively), and
-- a module (bundle) is sent to a client only once (per session).
+  static dependencies of *D* (recursively),
+- a module (bundle) is sent to a client only once (per session), and
+- bundles connected by static dependencies are sent in parallel.
 
-It should be noted that the solution for an app's graph may not provide the
-ideal set of bundles (whatever that measure may be). In this case, there are
-two courses of action: (1) swap dynamic with static dependencies (or vice
-versa), or (2) use dynapack postprocessing options (TODO) to undo its work to
-your liking.
+One of the wonderful consequences of these guarantees is the vanishing of
+configuration options for manipulating the contents of your bundles. Instead,
+dependencies can be added, removed, and swapped (static for dynamic and vice
+versa) with reckless abandon without concern for module duplication or
+wasted bandwidth.
 
 Here is a [complete working example](https://github.com/bauerca/dynapack-example-simple)
 of dynapack.
@@ -32,7 +33,8 @@ consider the dependency graph:
 
 ![Logo](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/diamond.png)
 
-This situation should lead to *4 bundles*. If a client possesses module **a** and
+This situation should lead to *4 bundles*, one for each module.
+If a client possesses module **a** and
 requests **b**, it should receive **b** and **d**. However, if it instead
 requests **c**, it should receive **c** and **d**. Moreover, if a client requests
 **b** *then* **c**, the request for **c** should return *only* **c**.
@@ -40,7 +42,6 @@ requests **c**, it should receive **c** and **d**. Moreover, if a client request
 This example is simplified for explanatory purposes. The RequireJS loader, in fact,
 does this, but on the *module* level. Dynapack handles the dynamic dependency diamond
 in the general case on the *bundle* level to reduce server requests.
-
 
 # Audience
 
