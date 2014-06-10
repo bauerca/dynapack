@@ -295,6 +295,24 @@ Dynapack.prototype.processEntry = function(entry, callback) {
 };
 
 
+function replaceAll(src, remove, insert) {
+  var re = new RegExp(
+    remove.replace(/\\/g, '\\\\')
+      .replace(/\./g, '\\.')
+      .replace(/\[/g, '\\[')
+      .replace(/\]/g, '\\]'),
+    'g'
+  );
+  return src.replace(re, insert);
+}
+
+function replaceAllString(src, remove, insert) {
+  insert = '"' + insert + '"';
+  src = replaceAll(src, '\'' + remove + '\'', insert);
+  src = replaceAll(src, '"' + remove + '"', insert);
+  return src;
+}
+
 /**
  *  Change all ids from full path names to integer strings. This also changes
  *  the module string in the source code of each module. Serious obfuscation here;
@@ -309,13 +327,9 @@ Dynapack.prototype.reId = function() {
     _.each(oldDeps, function(depId, name) {
       var newId = self.modules[depId].index.toString();
       // Replace in module source.
-      module.source = module.source.replace(
-        '\'' + name + '\'',
-        '\'' + newId + '\''
-      ).replace(
-        '"' + name + '"',
-        '"' + newId + '"'
-      );
+      module.source = replaceAllString(module.source, name, newId);
+      console.log('replacing', name, 'with', newId);
+      console.log(module.source);
       module.deps.push(newId);
     });
     var oldDynamic = module.dynamic;
@@ -323,13 +337,9 @@ Dynapack.prototype.reId = function() {
     _.each(oldDynamic, function(depId, name) {
       var newId = self.modules[depId].index.toString();
       // Replace in module source.
-      module.source = module.source.replace(
-        '\'' + name + '\'',
-        '\'' + newId + '\''
-      ).replace(
-        '"' + name + '"',
-        '"' + newId + '"'
-      );
+      module.source = replaceAllString(module.source, name, newId);
+      console.log('replacing', name, 'with', newId);
+      console.log(module.source);
       module.dynamic.push(newId);
     });
   });
