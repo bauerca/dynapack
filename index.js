@@ -138,7 +138,7 @@ Dynapack.prototype.processModule = function(module, entryIndex, callback) {
     // Parse source for dynamic dependencies/new entry points.
     this.findDynamic(module, callback);
   }
-  console.log('module', id, 'entries:', module.entries);
+  //console.log('module', id, 'entries:', module.entries);
 
   // Put the module in a chunk.
   var chunkId = this.chunkId(module);
