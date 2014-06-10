@@ -8,9 +8,11 @@ var extend = require('xtend');
 var async = require('async');
 var _ = require('underscore');
 var encodeBits = require('./lib/encode-bits');
+var insertGlobals = require('insert-module-globals');
 //var Transform = require('./lib/transform');
 //var JSONStream = require('JSONStream');
 
+var processPath = require.resolve('process/browser.js');
 
 function Dynapack(entry, opts) {
   if (!(this instanceof Dynapack)) {
@@ -40,6 +42,17 @@ function Dynapack(entry, opts) {
     labels.join('|') +
     ')\\s*\\*/', 'g'
   );
+
+  self.globalTransforms = function(file) {
+    return insertGlobals(file, {
+      vars: {
+        process: function() {
+          return 'require(' + JSON.stringify(processPath) + ')';
+        }
+      },
+      basedir: path.dirname(entry)
+    });
+  };
 
   //self.transform = Transform({
   //  moduleLabel: labels[0]
@@ -244,8 +257,9 @@ Dynapack.prototype.processEntry = function(entry, callback) {
   var newEntries = [];
 
   var mdepOpts = {
-    modules: self.builtins
+    modules: self.builtins,
     //transform: self.transform
+    globalTransform: self.globalTransforms
   };
 
   var depStream = mdeps(entry, mdepOpts).pipe(through2.obj(handle));

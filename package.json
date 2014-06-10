@@ -1,6 +1,6 @@
 {
   "name": "dynapack",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
@@ -11,16 +11,18 @@
     "lib": "lib"
   },
   "dependencies": {
-    "browser-resolve": "~1.2.4",
     "async": "~0.9.0",
-    "resolve": "~0.7.0",
-    "esprima": "~1.2.2",
-    "through2": "~0.4.2",
-    "module-deps": "~2.1.0",
-    "xtend": "~3.0.0",
-    "underscore": "~1.6.0",
+    "browser-resolve": "~1.2.4",
     "browserify": "^4.1.7",
-    "minimist": "^0.1.0"
+    "esprima": "~1.2.2",
+    "insert-module-globals": "^6.0.0",
+    "minimist": "^0.1.0",
+    "module-deps": "~2.1.0",
+    "process": "^0.7.0",
+    "resolve": "~0.7.0",
+    "through2": "~0.4.2",
+    "underscore": "~1.6.0",
+    "xtend": "~3.0.0"
   },
   "devDependencies": {
     "expect.js": "~0.3.1",

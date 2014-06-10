@@ -4,25 +4,23 @@ var expect = require('expect.js');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
-    //var mods = [];
-
     var packer = dynapack(__dirname + '/diamond/a.js');
     packer.run(function(chunks) { 
-      console.log(JSON.stringify(chunks, null, 2));
+      //console.log(JSON.stringify(chunks, null, 2));
       expect(Object.keys(chunks).length).to.be(4);
       done();
     });
-
-    //  .on('data', function(mod) {
-    //    mods.push(mod);
-    //    console.log(JSON.stringify(mod, null, 2));
-    //  })
-    //  .on('end', function() {
-    //    //expect(mods.length).to.be(3);
-    //    assert(mods.length === 3);
-    //    done();
-    //  });
   });
+
+  it('should inject process global', function(done) {
+    var packer = dynapack(__dirname + '/usesProcess.js');
+    packer.run(function(chunks) { 
+      //console.log(JSON.stringify(chunks, null, 2));
+      expect(Object.keys(chunks[1]).length).to.be(2);
+      done();
+    });
+  });
+
 });
 
 xdescribe('encode-bits', function() {
