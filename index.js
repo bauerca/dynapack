@@ -291,7 +291,6 @@ Dynapack.prototype.processEntry = function(entry, callback) {
       callback();
     });
   }
-
 };
 
 
@@ -440,17 +439,13 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
 };
 
 /**
- *  Pack chunks for browser.
+ *  Write chunks to files.
  */
-Dynapack.prototype.write = function() {
+Dynapack.prototype.write = function(done) {
   var self = this;
   self.reId();
 
-  var mainChunks = self.requiredChunks(self.entry);
-  var main = (
-    fs.readFileSync(__dirname + '/lib/require.js') +
-    '("' + self.entry + '","' + self.opts.prefix + '");'
-  );
+  var files = {};
 
   var output = self.opts.output;
   try {
@@ -461,18 +456,29 @@ Dynapack.prototype.write = function() {
     }
   }
 
+  var mainChunks = self.requiredChunks(self.entry);
+  var main = (
+    fs.readFileSync(__dirname + '/lib/require.js') +
+    '("' + self.entry + '","' + self.opts.prefix + '");'
+  );
+
   _.each(self.chunks, function(modules, chunkId) {
     var chunk = self.wrapChunk(chunkId, modules);
     if (mainChunks.indexOf(chunkId) !== -1) {
       main += chunk;
     } else {
-      var file = path.join(output, chunkId + '.js');
-      fs.writeFile(file, chunk);
+      var name = path.join(output, chunkId + '.js');
+      files[name] = chunk;
     }
   });
-  fs.writeFile(
-    path.join(output, 'main.js'),
-    main
+  files[path.join(output, 'main.js')] = main;
+
+  async.each(
+    Object.keys(files),
+    function(file, written) {
+      fs.writeFile(file, files[file], written);
+    },
+    done
   );
 };
 

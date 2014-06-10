@@ -1,6 +1,6 @@
 {
   "name": "dynapack",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
@@ -25,11 +25,12 @@
     "xtend": "~3.0.0"
   },
   "devDependencies": {
-    "expect.js": "~0.3.1",
     "connect": "~3.0.0",
+    "dynafetch": "0.0.2",
+    "expect.js": "~0.3.1",
+    "express": "^4.4.2",
     "parseurl": "~1.0.1",
-    "serve-static": "~1.2.0",
-    "dynafetch": "0.0.2"
+    "serve-static": "~1.2.0"
   },
   "scripts": {
     "test": "mocha -C tests/"
