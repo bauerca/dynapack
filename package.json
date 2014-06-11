@@ -1,13 +1,13 @@
 {
   "name": "dynapack",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
     "dynapack": "./bin/dynapack.js"
   },
   "directories": {
-    "test": "tests",
+    "test": "test",
     "lib": "lib"
   },
   "dependencies": {
@@ -33,7 +33,7 @@
     "serve-static": "~1.2.0"
   },
   "scripts": {
-    "test": "mocha -C tests/"
+    "test": "mocha -C"
   },
   "repository": {
     "type": "git",
