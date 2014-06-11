@@ -1,6 +1,6 @@
 {
   "name": "dynapack",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
@@ -14,6 +14,7 @@
     "async": "~0.9.0",
     "browser-resolve": "~1.2.4",
     "browserify": "^4.1.7",
+    "commondir": "0.0.1",
     "esprima": "~1.2.2",
     "insert-module-globals": "^6.0.0",
     "minimist": "^0.1.0",

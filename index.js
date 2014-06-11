@@ -9,6 +9,7 @@ var async = require('async');
 var _ = require('underscore');
 var encodeBits = require('./lib/encode-bits');
 var insertGlobals = require('insert-module-globals');
+var commondir = require('commondir');
 //var Transform = require('./lib/transform');
 //var JSONStream = require('JSONStream');
 
@@ -27,6 +28,7 @@ function Dynapack(entry, opts) {
       dynamicLabels: 'js',
       builtins: builtins,
       output: './chunks',
+      obfuscate: false,
       prefix: '/' // needs trailing slash!
     },
     opts
@@ -323,12 +325,19 @@ function replaceAllString(src, remove, insert) {
  */
 Dynapack.prototype.reId = function() {
   var self = this;
+  var base = commondir(Object.keys(self.modules));
+  //console.log('base directory for ids', base);
+
   // First change dependencies.
   _.each(self.modules, function(module, id) {
     var oldDeps = module.deps;
     module.deps = [];
     _.each(oldDeps, function(depId, name) {
-      var newId = self.modules[depId].index.toString();
+      var newId = (
+        self.opts.obfuscate ?
+        self.modules[depId].index.toString() :
+        depId.slice(base.length)
+      );
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
       module.deps.push(newId);
@@ -336,24 +345,40 @@ Dynapack.prototype.reId = function() {
     var oldDynamic = module.dynamic;
     module.dynamic = [];
     _.each(oldDynamic, function(depId, name) {
-      var newId = self.modules[depId].index.toString();
+      var newId = (
+        self.opts.obfuscate ?
+        self.modules[depId].index.toString() :
+        depId.slice(base.length)
+      );
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
       module.dynamic.push(newId);
     });
   });
   // Then change entries.
-  self.entry = self.modules[self.entry].index.toString();
+  self.entry = (
+    self.opts.obfuscate ?
+    self.modules[self.entry].index.toString() :
+    self.entry.slice(base.length)
+  );
   var oldEntries = self.entries;
   self.entries = [];
   _.each(oldEntries, function(id) {
-    self.entries.push(self.modules[id].index.toString());
+    self.entries.push(
+      self.opts.obfuscate ?
+      self.modules[id].index.toString() :
+      id.slice(base.length)
+    );
   });
   // Then change modules themselves.
   var oldModules = self.modules;
   self.modules = {};
   _.each(oldModules, function(module, oldId) {
-    var newId = module.index.toString();
+    var newId = (
+      self.opts.obfuscate ?
+      module.index.toString() :
+      oldId.slice(base.length)
+    );
     module.path = oldId;
     module.id = newId;
     self.modules[newId] = module;
@@ -448,6 +473,7 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
  */
 Dynapack.prototype.write = function(done) {
   var self = this;
+
   self.reId();
 
   var files = {};
