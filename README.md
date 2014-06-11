@@ -39,9 +39,10 @@ requests **b**, it should receive **b** and **d**. However, if it instead
 requests **c**, it should receive **c** and **d**. Moreover, if a client requests
 **b** *then* **c**, the request for **c** should return *only* **c**.
 
-This example is simplified for explanatory purposes. The RequireJS loader, in fact,
-does this, but on the *module* level. Dynapack handles the dynamic dependency diamond
-in the general case on the *bundle* level to reduce server requests.
+This example is simplified for explanatory purposes. The RequireJS loader, in
+fact, does this, but on the *module* level and *not* in parallel for static
+dependencies (AFAIK). Dynapack handles the dynamic dependency diamond in the
+general case on the *bundle* level.
 
 # Audience
 
