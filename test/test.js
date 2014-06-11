@@ -4,6 +4,7 @@ var expect = require('expect.js');
 var express = require('express');
 var fs = require('fs');
 var http = require('http');
+var async = require('async');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
@@ -33,51 +34,72 @@ describe('dynapack', function() {
 
   it('should pass browser tests', function(done) {
     this.timeout(0);
+    
+    var browserTests = require('./browser-tests');
+    var app = express();
 
-    var packer = dynapack(__dirname + '/diamond/a.js', {
-      output: __dirname + '/diamond/bundles'
-    });
-    packer.run(function(chunks) { 
-      packer.write(function() {
+    async.each(
+      browserTests,
+      function(test, callback) {
+        var testDir = __dirname + test.path + '/';
+
+        var packer = dynapack(testDir + test.entry, {
+          output: testDir + 'bundles',
+          prefix: test.path
+        });
+        packer.run(function(chunks) { 
+          packer.write(callback);
+        });
+      },
+      function() {
         
-        var jsSendCount = 0;
+        var results = '';
+
+        function getResults(query) {
+          if (Object.keys(query).length) {
+            results += (
+              '<li>' +
+                query.test + ': ' +
+                query.result +
+              '</li>'
+            );
+          }
+        }
+
+        var firstVisit = true;
 
         var app = express();
-        app.use(function(req, res) {
-          // Try to serve javascript files with delay.
-          var jsFile = __dirname + '/diamond/bundles' + req.path;
-          if (req.path !== '/' && fs.existsSync(jsFile)) {
-            console.log('sending script', jsFile);
-            // Send js 200 ms later and finish test if all 4
-            // bundles have been sent.
-            setTimeout(function() {
-              res.sendfile(jsFile, function(err) {
-                if (err) {
-                  done(err);
-                }
-                if (++jsSendCount === 4) {
-                  done();
-                }
-              });
-            }, 200);
-
-            return;
-          }
-
-          // Otherwise send testing page.
-          console.log('sending testing page');
+        app.use(function(req, res, next) {
+          console.log('request for', req.originalUrl);
+          next();
+        });
+        app.get('/', function(req, res) {
           res.send(
-            '<!DOCTYPE html><html><head></head><body>' +
-            '<h2 id="notify">Downloading main.js...</h2>' +
-            '<script type="text/javascript" src="/main.js"></script>' +
-            '</body></html>'
+            '<html><head></head><body>' +
+            (
+              firstVisit ?
+              (
+                '<script>location = "' +
+                browserTests[0].path +
+                '";</script>'
+              ) :
+              '<ul>' + results + '</ul>'
+            ) +
+            '</script></body></html>'
           );
+          !firstVisit && done();
+          firstVisit = false;
+        });
+        app.get('/finished', function(req, res) {
+          getResults(req.query);
+          res.redirect('/');
         });
 
-        process.on('SIGINT', function() {
-          console.log('Stopping server...');
-          server && server.close();
-          process.exit();
+        browserTests.forEach(function(test) {
+          app.use(test.path, function(req, res) {
+            getResults(req.query);
+            test.middleware(req, res);
+          });
         });
 
         var port = 3333;
@@ -88,10 +110,15 @@ describe('dynapack', function() {
             'to complete testing. CTRL-C to abort.'
           );
         });
-      });
+      }
+    );
+
+    process.on('SIGINT', function() {
+      console.log('Stopping server...');
+      server && server.close();
+      process.exit();
     });
   });
-
 
 });
 

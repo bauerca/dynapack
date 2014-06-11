@@ -1,6 +1,8 @@
 var __b = './b' /*js*/;
 var __c = './c' /*js*/;
 var fetch = require('dynafetch')(require);
+var latency = require('../latency');
+var report = require('../report');
 
 var notify = document.getElementById('notify');
 
@@ -10,9 +12,17 @@ var notify = document.getElementById('notify');
 // should happen IN PARALLEL. This means it should take roughly 200ms
 // for the fetch callback to run.
 
+
 setTimeout(function() {
   notify.innerHTML = 'fetching module c...';
+  var start = (new Date()).getTime();
   fetch([__c], function(c) {
-    notify.innerHTML = 'done';
+    notify.innerHTML = (
+      'Expect ' + latency.toString() + 'ms load time. ' +
+      'Time taken: ' +
+      ((new Date()).getTime() - start).toString() +
+      'ms'
+    );
+    report(notify.textContent);
   });
 }, 20);

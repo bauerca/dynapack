@@ -32,6 +32,10 @@ function Dynapack(entry, opts) {
     opts
   );
 
+  if (self.opts.prefix[self.opts.prefix.length - 1] !== '/') {
+    self.opts.prefix += '/';
+  }
+
   self.builtins = self.opts.builtins;
 
   var labels = self.opts.dynamicLabels;
@@ -327,8 +331,6 @@ Dynapack.prototype.reId = function() {
       var newId = self.modules[depId].index.toString();
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
-      console.log('replacing', name, 'with', newId);
-      console.log(module.source);
       module.deps.push(newId);
     });
     var oldDynamic = module.dynamic;
@@ -337,8 +339,6 @@ Dynapack.prototype.reId = function() {
       var newId = self.modules[depId].index.toString();
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
-      console.log('replacing', name, 'with', newId);
-      console.log(module.source);
       module.dynamic.push(newId);
     });
   });
@@ -425,8 +425,13 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
     });
   });
 
+  if (!self.chunkHeader) {
+    self.chunkHeader = fs.readFileSync(__dirname + '/lib/chunk.js');
+  }
+
   return (
-    'dynapackChunkLoaded("' + chunkId + '", {' +
+    self.chunkHeader + '("' + chunkId + '", [{' +
+    //'dynapackChunkLoaded("' + chunkId + '", {' +
       Object.keys(modules).map(function(moduleId) {
         return (
           '"' + moduleId + '":' +
@@ -434,7 +439,7 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
         );
       }).join(',') + '},' +
     JSON.stringify(entries) +
-    ');'
+    ']);'
   );
 };
 
