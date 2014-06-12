@@ -490,7 +490,9 @@ Dynapack.prototype.write = function(done) {
   var mainChunks = self.requiredChunks(self.entry);
   var main = (
     fs.readFileSync(__dirname + '/lib/require.js') +
-    '("' + self.entry + '","' + self.opts.prefix + '");'
+    '("' + self.entry + '",' +
+    JSON.stringify(mainChunks) + ',"' +
+    self.opts.prefix + '");'
   );
 
   _.each(self.chunks, function(modules, chunkId) {

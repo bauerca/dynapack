@@ -57,5 +57,23 @@ module.exports = [
         );
       }
     }
+  },
+  {
+    path: '/many-in-main',
+    entry: 'main.js',
+    middleware: function(req, res) {
+      var bundle = __dirname + '/many-in-main/bundles' + req.path;
+      if (req.path === '/') {
+        res.send(
+          '<!DOCTYPE html><html><head></head><body>' +
+          '<script type="text/javascript" async src="/many-in-main/main.js"></script>' +
+          '</body></html>'
+        );
+      } else {
+        res.sendfile(bundle, function(err) {
+          if (err) throw err;
+        });
+      }
+    }
   }
 ];
