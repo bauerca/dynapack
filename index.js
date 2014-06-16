@@ -29,6 +29,7 @@ function Dynapack(entry, opts) {
       builtins: builtins,
       output: './chunks',
       obfuscate: false,
+      globalTransforms: [],
       prefix: '/' // needs trailing slash!
     },
     opts
@@ -49,16 +50,18 @@ function Dynapack(entry, opts) {
     ')\\s*\\*/', 'g'
   );
 
-  self.globalTransforms = function(file) {
-    return insertGlobals(file, {
-      vars: {
-        process: function() {
-          return 'require(' + JSON.stringify(processPath) + ')';
-        }
-      },
-      basedir: path.dirname(entry)
-    });
-  };
+  self.globalTransforms = self.opts.globalTransforms.concat(
+    function(file) {
+      return insertGlobals(file, {
+        vars: {
+          process: function() {
+            return 'require(' + JSON.stringify(processPath) + ')';
+          }
+        },
+        basedir: path.dirname(entry)
+      });
+    }
+  );
 
   //self.transform = Transform({
   //  moduleLabel: labels[0]

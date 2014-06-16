@@ -5,6 +5,7 @@ var express = require('express');
 var fs = require('fs');
 var http = require('http');
 var async = require('async');
+var envify = require('envify/custom');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
@@ -21,6 +22,21 @@ describe('dynapack', function() {
     packer.run(function(chunks) { 
       //console.log(JSON.stringify(chunks, null, 2));
       expect(Object.keys(chunks[1]).length).to.be(2);
+      done();
+    });
+  });
+
+  it('should pass global transforms to module-deps', function(done) {
+    var packer = dynapack(__dirname + '/usesEnv.js', {
+      globalTransforms: [
+        envify({HOST: 'website.org', PORT: '80'})
+      ]
+    });
+    packer.run(function(chunks) { 
+      //console.log(JSON.stringify(chunks, null, 2));
+      // Should exclude process shim b/c envify injects environment
+      // variables.
+      expect(Object.keys(chunks[1]).length).to.be(1);
       done();
     });
   });
