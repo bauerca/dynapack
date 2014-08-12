@@ -45,7 +45,8 @@ function Dynapack(entry, opts) {
   labels = Array.isArray(labels) ? labels : [labels];
 
   self.dynRegexp = new RegExp(
-    '([\'"])([^\'"]+)\\1\\s*[,;]?\\s*/\\*\\s*(' + 
+    '(__dirname\\s+\\+\\s+)?' +
+    '([\'"])([^\'"]+)\\2\\s*[,;]?\\s*/\\*\\s*(' + 
     labels.join('|') +
     ')\\s*\\*/', 'g'
   );
@@ -177,13 +178,25 @@ Dynapack.prototype.processModule = function(module, entryIndex, callback) {
  *  Find all dynamic dependencies in module source and add to 'dynamic'
  *  property on module.
  */
+
 Dynapack.prototype.findDynamic = function(module, callback) {
   var match;
-  var matches = [];
+  var modulePaths = [];
 
-  while (match = this.dynRegexp.exec(module.source)) {
-    matches.push(match);
-  }
+  module.source = module.source.replace(
+    this.dynRegexp,
+    function(match, dirname, quote, relpath, type) {
+      //console.log('dynamic dep:');
+      //console.log('  match', match);
+      //console.log('  dirname', dirname);
+      //console.log('  quote', quote);
+      //console.log('  relpath', relpath);
+      //console.log('  type', type);
+      var modulePath = (dirname ? '.' : '') + relpath;
+      modulePaths.push(modulePath);
+      return quote + modulePath + quote;
+    }
+  );
 
   var resolveOpts = {
     filename: module.id,
@@ -195,16 +208,15 @@ Dynapack.prototype.findDynamic = function(module, callback) {
   module.dynamic = {};
 
   async.each(
-    matches,
-    function(match, callback) {
-      var name = match[2];
+    modulePaths,
+    function(modulePath, callback) {
       //console.log('resolving', name, 'with', resolveOpts);
-      browserResolve(name, resolveOpts, function(err, id) {
+      browserResolve(modulePath, resolveOpts, function(err, id) {
         if (err) {
           callback(err);
           return;
         }
-        module.dynamic[name] = id;
+        module.dynamic[modulePath] = id;
         callback();
       });
     },
@@ -249,9 +261,6 @@ Dynapack.prototype._dynDeps = function(have) {
 /**
  *  Recursively fetch all dependencies, static and dynamic.
  *
- *  @param {Object<String, Module>} have The modules already loaded to
- *    the "client."
- *  @param {String} need The id of the module needed by the "client."
  *  @param {Function} callback
  */
 Dynapack.prototype.processEntry = function(entry, callback) {
@@ -278,7 +287,6 @@ Dynapack.prototype.processEntry = function(entry, callback) {
 
     // Recurse.
     async.each(
-      //self.dynDeps(have),
       newEntries,
       self.processEntry.bind(self),
       callback
@@ -406,6 +414,7 @@ Dynapack.prototype.reId = function() {
  *  information on the fly as modules are read from module-deps, but
  *  oh well.
  */
+
 Dynapack.prototype.requiredChunks = function(entryModuleId) {
   var self = this;
   var entryIndex = self.entries.indexOf(entryModuleId);
