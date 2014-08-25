@@ -15,12 +15,41 @@ var commondir = require('commondir');
 
 var processPath = require.resolve('process/browser.js');
 
-function Dynapack(entry, opts) {
+function Dynapack(entries, opts) {
   if (!(this instanceof Dynapack)) {
-    return new Dynapack(entry, opts);
+    return new Dynapack(entries, opts);
   }
 
   var self = this;
+
+  // Normalize entries to array and set self.entryIds.
+
+  if ('string' == typeof entries) {
+    self.entryIds = [entries];
+    entries = [entries];
+  }
+  else if (Array.isArray(entries)) {
+    self.entryIds = [].concat(entries);
+  }
+  else {
+    self.entryIds = Object.keys(entries);
+    entries = self.entryIds.map(function(entryId) {
+      return entries[entryId];
+    });
+  }
+
+  // Entries should be absolute filepaths.
+
+  entries.forEach(function(entry) {
+    if (entry[0] !== '/') {
+      throw new Error('Entry modules must be specified by absolute paths');
+    }
+  });
+
+  // Entries are identified by an index. Each element of the following is
+  // a module id for an entry point.
+  self.entries = entries;
+
 
   self.opts = extend(
     {
@@ -58,8 +87,8 @@ function Dynapack(entry, opts) {
           process: function() {
             return 'require(' + JSON.stringify(processPath) + ')';
           }
-        },
-        basedir: path.dirname(entry)
+        }
+        //basedir: path.dirname(entry)
       });
     }
   );
@@ -68,7 +97,6 @@ function Dynapack(entry, opts) {
   //  moduleLabel: labels[0]
   //});
 
-  self.entry = entry;
   self.modules = {};
 
   // A mapping from chunk id to a subset of modules. The chunk id is formed
@@ -78,27 +106,37 @@ function Dynapack(entry, opts) {
   // the chunk id.
   self.chunks = {};
 
-  // Entries are identified by an index. Each element of the following is
-  // a module id for an entry point.
-  self.entries = [];
+  // This will include the given entry points. Roots are entry points and
+  // dynamic modules. They define static dependency trees, the union of which
+  // cover all modules.
+  self.roots = [];
 
   // Every module that is a dynamic dependency is given a unique integer
   // index. This is so we can id our bundles.
-  self.entryCount = 0;
+  self.dynamicModuleCount = 0;
   self.moduleCount = 0;
 }
 
 Dynapack.prototype.run = function(callback) {
   var self = this;
-  this.processEntry(self.entry, function() {
-    callback && callback(self.chunks);
-  });
+
+  async.each(
+    self.entries,
+    self.processRoot.bind(self),
+    function(err) {
+      callback && callback(self.chunks);
+    }
+  );
+
+  //this.processRoot(self.entry, function() {
+    //callback && callback(self.chunks);
+  //});
 };
 
 
 Dynapack.prototype.chunkId = function(module) {
   //console.log('chunk id for', module);
-  return encodeBits(module.entries, 32);
+  return encodeBits(module.roots, 32);
 };
 
 
@@ -123,7 +161,7 @@ Dynapack.prototype.chunkId = function(module) {
  *    var blah = '/user/name/project/node_modules/blah/index.js';
  *
  */
-Dynapack.prototype.processModule = function(module, entryIndex, callback) {
+Dynapack.prototype.processModule = function(module, rootIndex, callback) {
   var id = module.id;
 
   if (id in this.modules) {
@@ -132,9 +170,9 @@ Dynapack.prototype.processModule = function(module, entryIndex, callback) {
 
     // Verify.
     var err;
-    if (module.entries.indexOf(entryIndex) > -1) {
+    if (module.roots.indexOf(rootIndex) > -1) {
       err = new Error(
-        'Entry point ' + entryIndex + ' already exists in module ' + id
+        'Root ' + rootIndex + ' already exists in module ' + id
       );
       return;
     }
@@ -148,20 +186,20 @@ Dynapack.prototype.processModule = function(module, entryIndex, callback) {
       delete this.chunks[chunkId];
     }
 
-    // Add new entry point to existing module.
-    module.entries.push(entryIndex);
+    // Add new root to existing module.
+    module.roots.push(rootIndex);
 
     process.nextTick(callback.bind(null, err, module));
   } else {
     // New module! Initialize.
     this.modules[id] = module;
-    module.entries = [entryIndex];
+    module.roots = [rootIndex];
     module.index = this.moduleCount++;
 
     // Parse source for dynamic dependencies/new entry points.
     this.findDynamic(module, callback);
   }
-  //console.log('module', id, 'entries:', module.entries);
+  //console.log('module', id, 'roots:', module.roots);
 
   // Put the module in a chunk.
   var chunkId = this.chunkId(module);
@@ -232,7 +270,6 @@ Dynapack.prototype.findDynamic = function(module, callback) {
       callback(err, module);
     }
   );
-
 };
 
 /**
@@ -263,16 +300,16 @@ Dynapack.prototype._dynDeps = function(have) {
  *
  *  @param {Function} callback
  */
-Dynapack.prototype.processEntry = function(entry, callback) {
+Dynapack.prototype.processRoot = function(root, callback) {
   var self = this;
 
-  // Add entry point to set of followed.
-  // self.entries[entry] = true;
-  var entryIndex = self.entries.push(entry) - 1;
+  // Add root point to set of followed.
+  // self.roots[root] = true;
+  var rootIndex = self.roots.push(root) - 1;
 
-  // The set of new entry points parsed from this entry point's
+  // The set of new roots parsed from this root's
   // bundle.
-  var newEntries = [];
+  var newRoots = [];
 
   var mdepOpts = {
     modules: self.builtins,
@@ -280,29 +317,29 @@ Dynapack.prototype.processEntry = function(entry, callback) {
     globalTransform: self.globalTransforms
   };
 
-  var depStream = mdeps(entry, mdepOpts).pipe(through2.obj(handle));
+  var depStream = mdeps(root, mdepOpts).pipe(through2.obj(handle));
   depStream.resume();
   depStream.on('end', function() {
     // Pack up the bundle asynchronously.
 
     // Recurse.
     async.each(
-      newEntries,
-      self.processEntry.bind(self),
+      newRoots,
+      self.processRoot.bind(self),
       callback
     );
   });
 
   function handle(module, encoding, callback) {
-    self.processModule(module, entryIndex, function(err) {
+    self.processModule(module, rootIndex, function(err) {
       // After processing, scan the dynamic dependencies found in the
       // module
       var id;
       var relId;
       for (relId in module.dynamic) {
         id = module.dynamic[relId];
-        if (self.entries.indexOf(id) < 0) {
-          newEntries.push(id);
+        if (self.roots.indexOf(id) < 0) {
+          newRoots.push(id);
         }
       }
       callback();
@@ -344,11 +381,7 @@ Dynapack.prototype.reId = function() {
     var oldDeps = module.deps;
     module.deps = [];
     _.each(oldDeps, function(depId, name) {
-      var newId = (
-        self.opts.obfuscate ?
-        self.modules[depId].index.toString() :
-        depId.slice(base.length)
-      );
+      var newId = reIdModule(depId);
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
       module.deps.push(newId);
@@ -356,31 +389,17 @@ Dynapack.prototype.reId = function() {
     var oldDynamic = module.dynamic;
     module.dynamic = [];
     _.each(oldDynamic, function(depId, name) {
-      var newId = (
-        self.opts.obfuscate ?
-        self.modules[depId].index.toString() :
-        depId.slice(base.length)
-      );
+      var newId = reIdModule(depId);
       // Replace in module source.
       module.source = replaceAllString(module.source, name, newId);
       module.dynamic.push(newId);
     });
   });
+
   // Then change entries.
-  self.entry = (
-    self.opts.obfuscate ?
-    self.modules[self.entry].index.toString() :
-    self.entry.slice(base.length)
-  );
-  var oldEntries = self.entries;
-  self.entries = [];
-  _.each(oldEntries, function(id) {
-    self.entries.push(
-      self.opts.obfuscate ?
-      self.modules[id].index.toString() :
-      id.slice(base.length)
-    );
-  });
+  self.entries = self.entries.map(reIdModule);
+  self.roots = self.roots.map(reIdModule);
+
   // Then change modules themselves.
   var oldModules = self.modules;
   self.modules = {};
@@ -394,6 +413,7 @@ Dynapack.prototype.reId = function() {
     module.id = newId;
     self.modules[newId] = module;
   });
+
   // Now chunks.
   var oldChunks = self.chunks;
   self.chunks = {};
@@ -404,30 +424,41 @@ Dynapack.prototype.reId = function() {
     });
     self.chunks[chunkId] = newModules;
   });
+
   // Now dance.
+
+
+  function reIdModule(id) {
+    return (
+      self.opts.obfuscate ?
+      self.modules[id].index.toString() :
+      id.slice(base.length)
+    );
+  }
 };
 
 /**
  *  When a module is required asynchronously, all of the chunks on
- *  which it depends must be downloaded by the client. This function
- *  finds those chunks given an entry point. We could gather this
+ *  which it depends (statically) must be downloaded immediately by
+ *  the client. This function
+ *  finds those chunks given a root module. We could gather this
  *  information on the fly as modules are read from module-deps, but
  *  oh well.
  */
 
-Dynapack.prototype.requiredChunks = function(entryModuleId) {
+Dynapack.prototype.requiredChunks = function(rootModuleId) {
   var self = this;
-  var entryIndex = self.entries.indexOf(entryModuleId);
-  if (entryIndex === -1) {
-    throw new Error(entryModuleId, 'is not in the entries list.');
+  var rootIndex = self.roots.indexOf(rootModuleId);
+  if (rootIndex === -1) {
+    throw new Error(rootModuleId, 'is not in the roots list.');
   }
   // Loop through all chunks.
   var required = [];
   _.each(self.chunks, function(modules, chunkId) {
     // Grab random module in chunk, all modules in chunk will have
-    // same 'entries' property. That's what defines a chunk. :|
+    // same 'roots' property. That's what defines a chunk. :|
     var module = modules[Object.keys(modules)[0]];
-    if (module.entries.indexOf(entryIndex) !== -1) {
+    if (module.roots.indexOf(rootIndex) !== -1) {
       required.push(chunkId);
     }
   });
@@ -451,14 +482,14 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
   var self = this;
   var modules = self.chunks[chunkId];
 
-  // A chunk brings with it a new set of entry points, not defined
+  // A chunk brings with it a new set of dynamic deps (roots), not defined
   // in any other chunk. The client must be informed of the new chunks
-  // this introduces. 'entries' is a mapping from entry point module id
+  // this introduces. 'roots' is a mapping from root module id
   // to an array of chunks.
-  var entries = {};
+  var roots = {};
   _.each(modules, function(module) {
     _.each(module.dynamic, function(id) {
-      entries[id] = self.requiredChunks(id);
+      roots[id] = self.requiredChunks(id);
     });
   });
 
@@ -475,7 +506,7 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
           self.wrapModule(modules[moduleId])
         );
       }).join(',') + '},' +
-    JSON.stringify(entries) +
+    JSON.stringify(roots) +
     ']);'
   );
 };
@@ -499,31 +530,66 @@ Dynapack.prototype.write = function(done) {
     }
   }
 
-  var mainChunks = self.requiredChunks(self.entry);
-  var main = (
-    fs.readFileSync(__dirname + '/lib/require.js') +
-    '("' + self.entry + '",' +
-    JSON.stringify(mainChunks) + ',"' +
-    self.opts.prefix + '");'
-  );
+  var entryHeader = fs.readFileSync(__dirname + '/lib/entry.js');
+
+  // Mapping from original entry path string to array of
+  // output-dir-relative js files that should be included in the entry
+  // point's page.
+  var entryInfo = {};
+
+  //var entriesChunks = [];
+  //var entriesBundles = self.entries.map(function(entry) {
+  self.entries.forEach(function(entry, index) {
+    var entryChunks = self.requiredChunks(entry);
+    //entriesChunks.push(entryChunks);
+
+    var entryId = self.entryIds[index];
+    var entryFiles = entryInfo[entryId] = [];
+
+    var entryBasename = 'entry.' + index + '.js';
+    entryFiles.push('/' + entryBasename);
+
+    entryChunks.forEach(function(chunkId) {
+      entryFiles.push('/' + chunkId + '.js');
+    });
+
+    var name = path.join(output, entryBasename);
+    files[name] = (
+      entryHeader +
+      '("' + entry + '",' +
+      JSON.stringify(entryChunks) + ',"' +
+      self.opts.prefix + '");'
+    );
+  });
+
+  // For each chunk, save it as an isolated downloadable chunk
+  // and as a part of all entry bundles to which it belongs.
 
   _.each(self.chunks, function(modules, chunkId) {
     var chunk = self.wrapChunk(chunkId, modules);
-    if (mainChunks.indexOf(chunkId) !== -1) {
-      main += chunk;
-    } else {
-      var name = path.join(output, chunkId + '.js');
-      files[name] = chunk;
-    }
+    var name = path.join(output, chunkId + '.js');
+    files[name] = chunk;
+
+    //for (var i = 0; i < entriesChunks.length; i++) {
+    //  if (entriesChunks[i].indexOf(chunkId) > -1) {
+    //    entriesBundles[i] += chunk;
+    //  }
+    //}
   });
-  files[path.join(output, 'main.js')] = main;
+
+  //entriesBundles.forEach(function(bundle, index) {
+  //  files[path.join(output, 'entry.' + index + '.js')] = bundle;
+  //});
 
   async.each(
     Object.keys(files),
     function(file, written) {
       fs.writeFile(file, files[file], written);
     },
-    done
+    function(err) {
+      if (err) done(err);
+      else done(null, entryInfo);
+    }
   );
 };
 

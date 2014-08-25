@@ -59,10 +59,15 @@ describe('dynapack', function() {
       function(test, callback) {
         var testDir = __dirname + test.path + '/';
 
-        var packer = dynapack(testDir + test.entry, {
-          output: testDir + 'bundles',
-          prefix: test.path
-        });
+        var packer = dynapack(
+          test.entries.map(
+            function(entry) {return testDir + entry;}
+          ),
+          {
+            output: testDir + 'bundles',
+            prefix: test.path
+          }
+        );
         packer.run(function(chunks) { 
           packer.write(callback);
         });

@@ -1,7 +1,7 @@
 module.exports = [
   {
     path: '/diamond',
-    entry: 'a.js',
+    entries: ['a.js'],
     middleware: function(req, res) {
       var fs = require('fs');
 
@@ -24,19 +24,25 @@ module.exports = [
       res.send(
         '<!DOCTYPE html><html><head></head><body>' +
         '<h2 id="notify">Downloading main.js...</h2>' +
-        '<script type="text/javascript" async src="/diamond/main.js"></script>' +
+        '<script type="text/javascript" async src="/diamond/entry.0.js"></script>' +
         '</body></html>'
       );
     }
   },
+
+  /**
+   *  In this test, the entry bundle arrives at the client much later than
+   *  a chunk on which it depends dynamically.
+   */
+
   {
     path: '/wrong-order',
-    entry: 'main.js',
+    entries: ['main.js'],
     middleware: function(req, res) {
       var fs = require('fs');
       var bundle = __dirname + '/wrong-order/bundles' + req.path;
 
-      if (req.path === '/main.js') {
+      if (req.path === '/entry.0.js') {
         setTimeout(function() {
           res.sendfile(bundle, function(err) {
             if (err) throw err;
@@ -51,7 +57,7 @@ module.exports = [
       } else {
         res.send(
           '<!DOCTYPE html><html><head></head><body>' +
-          '<script type="text/javascript" async src="/wrong-order/main.js"></script>' +
+          '<script type="text/javascript" async src="/wrong-order/entry.0.js"></script>' +
           '<script type="text/javascript" async src="/wrong-order/2.js"></script>' +
           '</body></html>'
         );
@@ -60,13 +66,31 @@ module.exports = [
   },
   {
     path: '/many-in-main',
-    entry: 'main.js',
+    entries: ['main.js'],
     middleware: function(req, res) {
       var bundle = __dirname + '/many-in-main/bundles' + req.path;
       if (req.path === '/') {
         res.send(
           '<!DOCTYPE html><html><head></head><body>' +
-          '<script type="text/javascript" async src="/many-in-main/main.js"></script>' +
+          '<script type="text/javascript" async src="/many-in-main/entry.0.js"></script>' +
+          '</body></html>'
+        );
+      } else {
+        res.sendfile(bundle, function(err) {
+          if (err) throw err;
+        });
+      }
+    }
+  },
+  {
+    path: '/entries',
+    entries: ['entryA.js', 'entryB.js'],
+    middleware: function(req, res) {
+      var bundle = __dirname + '/entries/bundles' + req.path;
+      if (req.path === '/') {
+        res.send(
+          '<!DOCTYPE html><html><head></head><body>' +
+          '<script type="text/javascript" async src="/entries/entry.0.js"></script>' +
           '</body></html>'
         );
       } else {
