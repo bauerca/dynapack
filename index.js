@@ -589,8 +589,10 @@ Dynapack.prototype.write = function(done) {
       fs.writeFile(file, files[file], written);
     },
     function(err) {
-      if (err) done(err);
-      else done(null, entryInfo);
+      if (done) {
+        if (err) done(err);
+        else done(null, entryInfo);
+      }
     }
   );
 };
