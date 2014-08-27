@@ -24,7 +24,8 @@ module.exports = [
       res.send(
         '<!DOCTYPE html><html><head></head><body>' +
         '<h2 id="notify">Downloading main.js...</h2>' +
-        '<script type="text/javascript" async src="/diamond/entry.0.js"></script>' +
+        //'<script type="text/javascript" async src="/diamond/entry.0.js"></script>' +
+        this.scripts('a.js') +
         '</body></html>'
       );
     }
@@ -46,19 +47,18 @@ module.exports = [
         setTimeout(function() {
           res.sendfile(bundle, function(err) {
             if (err) throw err;
+            console.log('sent', bundle);
           });
         }, 200);
-      } else if (req.path === '/2.js') {
-        setTimeout(function() {
-          res.sendfile(bundle, function(err) {
-            if (err) throw err;
-          });
-        }, 20);
+      } else if (/\.js$/.test(req.path)) {
+        res.sendfile(bundle, function(err) {
+          if (err) throw err;
+          console.log('sent', bundle);
+        });
       } else {
         res.send(
           '<!DOCTYPE html><html><head></head><body>' +
-          '<script type="text/javascript" async src="/wrong-order/entry.0.js"></script>' +
-          '<script type="text/javascript" async src="/wrong-order/2.js"></script>' +
+          this.scripts('main.js') + 
           '</body></html>'
         );
       }
@@ -72,7 +72,8 @@ module.exports = [
       if (req.path === '/') {
         res.send(
           '<!DOCTYPE html><html><head></head><body>' +
-          '<script type="text/javascript" async src="/many-in-main/entry.0.js"></script>' +
+          //'<script type="text/javascript" async src="/many-in-main/entry.0.js"></script>' +
+          this.scripts('main.js') +
           '</body></html>'
         );
       } else {
@@ -90,7 +91,8 @@ module.exports = [
       if (req.path === '/') {
         res.send(
           '<!DOCTYPE html><html><head></head><body>' +
-          '<script type="text/javascript" async src="/entries/entry.0.js"></script>' +
+          this.scripts('entryA.js') +
+          //'<script type="text/javascript" async src="/entries/entry.0.js"></script>' +
           '</body></html>'
         );
       } else {

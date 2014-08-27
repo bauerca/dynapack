@@ -1,6 +1,6 @@
 {
   "name": "dynapack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
@@ -31,6 +31,7 @@
     "envify": "^2.0.0",
     "expect.js": "~0.3.1",
     "express": "^4.4.2",
+    "morgan": "^1.2.3",
     "parseurl": "~1.0.1",
     "serve-static": "~1.2.0"
   },

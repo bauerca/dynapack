@@ -6,6 +6,7 @@ var fs = require('fs');
 var http = require('http');
 var async = require('async');
 var envify = require('envify/custom');
+var morgan = require('morgan');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
@@ -58,18 +59,30 @@ describe('dynapack', function() {
       browserTests,
       function(test, callback) {
         var testDir = __dirname + test.path + '/';
+        var entries = {};
+
+        test.entries.forEach(function(entry) {
+          entries[entry] = testDir + entry;
+        });
 
         var packer = dynapack(
-          test.entries.map(
-            function(entry) {return testDir + entry;}
-          ),
+          entries,
           {
             output: testDir + 'bundles',
             prefix: test.path
           }
         );
         packer.run(function(chunks) { 
-          packer.write(callback);
+          packer.write(function(err, entryInfo) {
+            console.log(JSON.stringify(entryInfo, null, 2));
+            test.entryInfo = entryInfo;
+            test.scripts = function(entry) {
+              return entryInfo[entry].map(function(script) {
+                return '<script type="text/javascript" async src="' + script + '"></script>';
+              }).join('')
+            };
+            callback(err);
+          });
         });
       },
       function() {
@@ -90,10 +103,7 @@ describe('dynapack', function() {
         var firstVisit = true;
 
         var app = express();
-        app.use(function(req, res, next) {
-          console.log('request for', req.originalUrl);
-          next();
-        });
+        app.use(morgan('combined'));
         app.get('/', function(req, res) {
           res.send(
             '<html><head></head><body>' +

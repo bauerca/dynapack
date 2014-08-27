@@ -537,6 +537,8 @@ Dynapack.prototype.write = function(done) {
   // point's page.
   var entryInfo = {};
 
+  var prefix = self.opts.prefix;
+
   //var entriesChunks = [];
   //var entriesBundles = self.entries.map(function(entry) {
   self.entries.forEach(function(entry, index) {
@@ -547,10 +549,10 @@ Dynapack.prototype.write = function(done) {
     var entryFiles = entryInfo[entryId] = [];
 
     var entryBasename = 'entry.' + index + '.js';
-    entryFiles.push('/' + entryBasename);
+    entryFiles.push(prefix + entryBasename);
 
     entryChunks.forEach(function(chunkId) {
-      entryFiles.push('/' + chunkId + '.js');
+      entryFiles.push(prefix + chunkId + '.js');
     });
 
     var name = path.join(output, entryBasename);
@@ -558,7 +560,7 @@ Dynapack.prototype.write = function(done) {
       entryHeader +
       '("' + entry + '",' +
       JSON.stringify(entryChunks) + ',"' +
-      self.opts.prefix + '");'
+      prefix + '");'
     );
   });
 
