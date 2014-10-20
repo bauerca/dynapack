@@ -7,6 +7,7 @@ var http = require('http');
 var async = require('async');
 var envify = require('envify/custom');
 var morgan = require('morgan');
+var iso = require('osh-iso-test');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
@@ -48,108 +49,119 @@ describe('dynapack', function() {
     server && server.close();
   });
 
-
   it('should pass browser tests', function(done) {
     this.timeout(0);
-    
-    var browserTests = require('./browser-tests');
-    var app = express();
-
-    async.each(
-      browserTests,
-      function(test, callback) {
-        var testDir = __dirname + test.path + '/';
-        var entries = {};
-
-        test.entries.forEach(function(entry) {
-          entries[entry] = testDir + entry;
-        });
-
-        var packer = dynapack(
-          entries,
-          {
-            output: testDir + 'bundles',
-            prefix: test.path
-          }
-        );
-        packer.run(function(chunks) { 
-          packer.write(function(err, entryInfo) {
-            console.log(JSON.stringify(entryInfo, null, 2));
-            test.entryInfo = entryInfo;
-            test.scripts = function(entry) {
-              return entryInfo[entry].map(function(script) {
-                return '<script type="text/javascript" async src="' + script + '"></script>';
-              }).join('')
-            };
-            callback(err);
-          });
-        });
-      },
-      function() {
-        
-        var results = '';
-
-        function getResults(query) {
-          if (Object.keys(query).length) {
-            results += (
-              '<li>' +
-                query.test + ': ' +
-                query.result +
-              '</li>'
-            );
-          }
-        }
-
-        var firstVisit = true;
-
-        var app = express();
-        app.use(morgan('combined'));
-        app.get('/', function(req, res) {
-          res.send(
-            '<html><head></head><body>' +
-            (
-              firstVisit ?
-              (
-                '<script>location = "' +
-                browserTests[0].path +
-                '";</script>'
-              ) :
-              '<ul>' + results + '</ul>'
-            ) +
-            '</script></body></html>'
-          );
-          !firstVisit && done();
-          firstVisit = false;
-        });
-        app.get('/finished', function(req, res) {
-          getResults(req.query);
-          res.redirect('/');
-        });
-
-        browserTests.forEach(function(test) {
-          app.use(test.path, function(req, res) {
-            getResults(req.query);
-            test.middleware(req, res);
-          });
-        });
-
-        var port = 3333;
-        server = http.createServer(app);
-        server.listen(port, function() {
-          console.log(
-            '\n\nPoint browser to localhost:' + port,
-            'to complete testing. CTRL-C to abort.'
-          );
-        });
-      }
-    );
-
-    process.on('SIGINT', function() {
-      console.log('Stopping server...');
-      server && server.close();
-      process.exit();
-    });
+    iso({
+      basedir: __dirname,
+      tests: [
+        'diamond',
+        'wrong-order',
+        'circular',
+        'simultaneous',
+        'entries'
+      ],
+      manual: false
+    }, done);
   });
+
+//    var browserTests = require('./browser-tests');
+//    var app = express();
+//
+//    async.each(
+//      browserTests,
+//      function(test, callback) {
+//        var testDir = __dirname + test.path + '/';
+//        var entries = {};
+//
+//        test.entries.forEach(function(entry) {
+//          entries[entry] = testDir + entry;
+//        });
+//
+//        var packer = dynapack(
+//          entries,
+//          {
+//            output: testDir + 'bundles',
+//            prefix: test.path
+//          }
+//        );
+//        packer.run(function(chunks) { 
+//          packer.write(function(err, entryInfo) {
+//            console.log(JSON.stringify(entryInfo, null, 2));
+//            test.entryInfo = entryInfo;
+//            test.scripts = function(entry) {
+//              return entryInfo[entry].map(function(script) {
+//                return '<script type="text/javascript" async src="' + script + '"></script>';
+//              }).join('')
+//            };
+//            callback(err);
+//          });
+//        });
+//      },
+//      function() {
+//        
+//        var results = '';
+//
+//        function getResults(query) {
+//          if (Object.keys(query).length) {
+//            results += (
+//              '<li>' +
+//                query.test + ': ' +
+//                query.result +
+//              '</li>'
+//            );
+//          }
+//        }
+//
+//        var firstVisit = true;
+//
+//        var app = express();
+//        app.use(morgan('combined'));
+//        app.get('/', function(req, res) {
+//          res.send(
+//            '<html><head></head><body>' +
+//            (
+//              firstVisit ?
+//              (
+//                '<script>location = "' +
+//                browserTests[0].path +
+//                '";</script>'
+//              ) :
+//              '<ul>' + results + '</ul>'
+//            ) +
+//            '</script></body></html>'
+//          );
+//          !firstVisit && done();
+//          firstVisit = false;
+//        });
+//        app.get('/finished', function(req, res) {
+//          getResults(req.query);
+//          res.redirect('/');
+//        });
+//
+//        browserTests.forEach(function(test) {
+//          app.use(test.path, function(req, res) {
+//            getResults(req.query);
+//            test.middleware(req, res);
+//          });
+//        });
+//
+//        var port = 3333;
+//        server = http.createServer(app);
+//        server.listen(port, function() {
+//          console.log(
+//            '\n\nPoint browser to localhost:' + port,
+//            'to complete testing. CTRL-C to abort.'
+//          );
+//        });
+//      }
+//    );
+//
+//    process.on('SIGINT', function() {
+//      console.log('Stopping server...');
+//      server && server.close();
+//      process.exit();
+//    });
+//  });
 
 });
 

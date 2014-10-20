@@ -32,8 +32,9 @@
     "expect.js": "~0.3.1",
     "express": "^4.4.2",
     "morgan": "^1.2.3",
+    "osh-iso-test": "latest",
     "parseurl": "~1.0.1",
-    "serve-static": "~1.2.0"
+    "serve-static": "^1.7.0"
   },
   "scripts": {
     "test": "mocha -C"

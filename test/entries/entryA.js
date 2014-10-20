@@ -1,6 +1,5 @@
 var other = require('./other');
-var report = require('../report');
 if (other === 'other module') {
-  report('passed');
+  document.location = iso.route + '/b';
 }
-else report('failed');
+else iso.fail('no require from entry A');

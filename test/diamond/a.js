@@ -1,8 +1,7 @@
 var __b = './b' /*js*/;
 var __c = './c' /*js*/;
 var fetch = require('dynafetch')(require);
-var latency = require('../latency');
-var report = require('../report');
+var latency = require('./latency');
 
 var notify = document.getElementById('notify');
 
@@ -23,6 +22,6 @@ setTimeout(function() {
       ((new Date()).getTime() - start).toString() +
       'ms'
     );
-    report(notify.textContent);
+    iso.report(notify.textContent);
   });
 }, 20);

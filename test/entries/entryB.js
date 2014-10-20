@@ -1,6 +1,5 @@
 var other = require('./other');
-var report = require('../report');
 if (other === 'other module') {
-  report('passed');
+  iso.ok('');
 }
-else report('failed');
+else iso.report('no module from b');
