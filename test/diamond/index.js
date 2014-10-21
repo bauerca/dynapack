@@ -38,12 +38,16 @@ module.exports = function(app, done) {
       prefix: iso.route + '/'
     }
   );
-  packer.run(function() {
-    packer.write(function(err, entryInfo) {
-      scripts = entryInfo.main.map(function(script) {
-        return '<script async src="' + script + '"></script>';
-      }).join('');
-      done();
-    });
+  packer.run(function(err) {
+    if (err) done(err);
+    else {
+      packer.write(function(err, entryInfo) {
+        if (err) return done(err);
+        scripts = entryInfo.main.map(function(script) {
+          return '<script async src="' + script + '"></script>';
+        }).join('');
+        done();
+      });
+    }
   });
 };

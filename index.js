@@ -119,18 +119,14 @@ function Dynapack(entries, opts) {
 
 Dynapack.prototype.run = function(callback) {
   var self = this;
-
   async.each(
     self.entries,
     self.processRoot.bind(self),
     function(err) {
-      callback && callback(self.chunks);
+      if (callback) callback(err, self.chunks);
+      else if (err) throw err;
     }
   );
-
-  //this.processRoot(self.entry, function() {
-    //callback && callback(self.chunks);
-  //});
 };
 
 
@@ -589,10 +585,8 @@ Dynapack.prototype.write = function(done) {
       fs.writeFile(file, files[file], written);
     },
     function(err) {
-      if (done) {
-        if (err) done(err);
-        else done(null, entryInfo);
-      }
+      if (done) done(err, entryInfo);
+      else if (err) throw err;
     }
   );
 };

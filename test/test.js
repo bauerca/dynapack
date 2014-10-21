@@ -12,19 +12,25 @@ var iso = require('osh-iso-test');
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
     var packer = dynapack(__dirname + '/diamond/a.js');
-    packer.run(function(chunks) { 
-      //console.log(JSON.stringify(chunks, null, 2));
-      expect(Object.keys(chunks).length).to.be(4);
-      done();
+    packer.run(function(err, chunks) { 
+      if (err) done(err);
+      else {
+        //console.log(JSON.stringify(chunks, null, 2));
+        expect(Object.keys(chunks).length).to.be(4);
+        done();
+      }
     });
   });
 
   it('should inject process global', function(done) {
     var packer = dynapack(__dirname + '/usesProcess.js');
-    packer.run(function(chunks) { 
-      //console.log(JSON.stringify(chunks, null, 2));
-      expect(Object.keys(chunks[1]).length).to.be(2);
-      done();
+    packer.run(function(err, chunks) { 
+      if (err) done(err);
+      else {
+        //console.log(JSON.stringify(chunks, null, 2));
+        expect(Object.keys(chunks[1]).length).to.be(2);
+        done();
+      }
     });
   });
 
@@ -34,12 +40,15 @@ describe('dynapack', function() {
         envify({HOST: 'website.org', PORT: '80'})
       ]
     });
-    packer.run(function(chunks) { 
-      //console.log(JSON.stringify(chunks, null, 2));
-      // Should exclude process shim b/c envify injects environment
-      // variables.
-      expect(Object.keys(chunks[1]).length).to.be(1);
-      done();
+    packer.run(function(err, chunks) { 
+      if (err) done(err);
+      else {
+        //console.log(JSON.stringify(chunks, null, 2));
+        // Should exclude process shim b/c envify injects environment
+        // variables.
+        expect(Object.keys(chunks[1]).length).to.be(1);
+        done();
+      }
     });
   });
 
