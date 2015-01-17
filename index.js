@@ -4,6 +4,7 @@ var browserResolve = require('browser-resolve');
 var through2 = require('through2');
 var fs = require('fs');
 var path = require('path');
+var mkdirp = require('mkdirp');
 var extend = require('xtend');
 var async = require('async');
 var _ = require('underscore');
@@ -46,17 +47,14 @@ function Dynapack(entries, opts) {
     }
   });
 
-  // Entries are identified by an index. Each element of the following is
-  // a module id for an entry point.
   self.entries = entries;
-
 
   self.opts = extend(
     {
       modules: [],
       dynamicLabels: 'js',
       builtins: builtins,
-      output: './chunks',
+      output: './bundles',
       obfuscate: false,
       globalTransforms: [],
       prefix: '/' // needs trailing slash!
@@ -99,12 +97,12 @@ function Dynapack(entries, opts) {
 
   self.modules = {};
 
-  // A mapping from chunk id to a subset of modules. The chunk id is formed
+  // A mapping from bundle id to a subset of modules. The bundle id is formed
   // from the set of entry points that touch the subset of modules. That is,
-  // the chunk module subset is the intersection of all static
+  // the bundle module subset is the intersection of all static
   // dependency trees identified by the group of entry points encoded into
-  // the chunk id.
-  self.chunks = {};
+  // the bundle id.
+  self.bundles = {};
 
   // This will include the given entry points. Roots are entry points and
   // dynamic modules. They define static dependency trees, the union of which
@@ -123,15 +121,15 @@ Dynapack.prototype.run = function(callback) {
     self.entries,
     self.processRoot.bind(self),
     function(err) {
-      if (callback) callback(err, self.chunks);
+      if (callback) callback(err, self.bundles);
       else if (err) throw err;
     }
   );
 };
 
 
-Dynapack.prototype.chunkId = function(module) {
-  //console.log('chunk id for', module);
+Dynapack.prototype.bundleId = function(module) {
+  //console.log('bundle id for', module);
   return encodeBits(module.roots, 32);
 };
 
@@ -173,13 +171,13 @@ Dynapack.prototype.processModule = function(module, rootIndex, callback) {
       return;
     }
 
-    // Must move module to another chunk. Remove from current chunk.
-    var chunkId = this.chunkId(module);
-    var oldChunk = this.chunks[chunkId];
-    delete oldChunk[id];
+    // Must move module to another bundle. Remove from current bundle.
+    var bundleId = this.bundleId(module);
+    var oldBundle = this.bundles[bundleId];
+    delete oldBundle[id];
 
-    if (Object.keys(oldChunk).length == 0) {
-      delete this.chunks[chunkId];
+    if (Object.keys(oldBundle).length == 0) {
+      delete this.bundles[bundleId];
     }
 
     // Add new root to existing module.
@@ -197,15 +195,15 @@ Dynapack.prototype.processModule = function(module, rootIndex, callback) {
   }
   //console.log('module', id, 'roots:', module.roots);
 
-  // Put the module in a chunk.
-  var chunkId = this.chunkId(module);
-  var chunk;
-  if (chunkId in this.chunks) {
-    chunk = this.chunks[chunkId];
+  // Put the module in a bundle.
+  var bundleId = this.bundleId(module);
+  var bundle;
+  if (bundleId in this.bundles) {
+    bundle = this.bundles[bundleId];
   } else {
-    chunk = this.chunks[chunkId] = {};
+    bundle = this.bundles[bundleId] = {};
   }
-  chunk[id] = module;
+  bundle[id] = module;
 };
 
 /**
@@ -410,15 +408,15 @@ Dynapack.prototype.reId = function() {
     self.modules[newId] = module;
   });
 
-  // Now chunks.
-  var oldChunks = self.chunks;
-  self.chunks = {};
-  _.each(oldChunks, function(modules, chunkId) {
+  // Now bundles.
+  var oldBundles = self.bundles;
+  self.bundles = {};
+  _.each(oldBundles, function(modules, bundleId) {
     var newModules = {};
     _.each(modules, function(module, oldId) {
       newModules[module.id] = module;
     });
-    self.chunks[chunkId] = newModules;
+    self.bundles[bundleId] = newModules;
   });
 
   // Now dance.
@@ -434,28 +432,28 @@ Dynapack.prototype.reId = function() {
 };
 
 /**
- *  When a module is required asynchronously, all of the chunks on
+ *  When a module is required asynchronously, all of the bundles on
  *  which it depends (statically) must be downloaded immediately by
  *  the client. This function
- *  finds those chunks given a root module. We could gather this
+ *  finds those bundles given a root module. We could gather this
  *  information on the fly as modules are read from module-deps, but
  *  oh well.
  */
 
-Dynapack.prototype.requiredChunks = function(rootModuleId) {
+Dynapack.prototype.requiredBundles = function(rootModuleId) {
   var self = this;
   var rootIndex = self.roots.indexOf(rootModuleId);
   if (rootIndex === -1) {
     throw new Error(rootModuleId, 'is not in the roots list.');
   }
-  // Loop through all chunks.
+  // Loop through all bundles.
   var required = [];
-  _.each(self.chunks, function(modules, chunkId) {
-    // Grab random module in chunk, all modules in chunk will have
-    // same 'roots' property. That's what defines a chunk. :|
+  _.each(self.bundles, function(modules, bundleId) {
+    // Grab random module in bundle, all modules in bundle will have
+    // same 'roots' property. That's what defines a bundle. :|
     var module = modules[Object.keys(modules)[0]];
     if (module.roots.indexOf(rootIndex) !== -1) {
-      required.push(chunkId);
+      required.push(bundleId);
     }
   });
   return required;
@@ -474,28 +472,26 @@ Dynapack.prototype.wrapModule = function(module) {
 
 /**
  */
-Dynapack.prototype.wrapChunk = function(chunkId, modules) {
+Dynapack.prototype.createBundle = function(bundleId, modules) {
   var self = this;
-  var modules = self.chunks[chunkId];
 
-  // A chunk brings with it a new set of dynamic deps (roots), not defined
-  // in any other chunk. The client must be informed of the new chunks
+  // A bundle brings with it a new set of dynamic deps (roots), not defined
+  // in any other bundle. The client must be informed of the new bundles
   // this introduces. 'roots' is a mapping from root module id
-  // to an array of chunks.
+  // to an array of bundles.
   var roots = {};
   _.each(modules, function(module) {
     _.each(module.dynamic, function(id) {
-      roots[id] = self.requiredChunks(id);
+      roots[id] = self.requiredBundles(id);
     });
   });
 
-  if (!self.chunkHeader) {
-    self.chunkHeader = fs.readFileSync(__dirname + '/lib/chunk.js');
+  if (!self.bundleHeader) {
+    self.bundleHeader = fs.readFileSync(__dirname + '/lib/bundle.js');
   }
 
   return (
-    self.chunkHeader + '("' + chunkId + '", [{' +
-    //'dynapackChunkLoaded("' + chunkId + '", {' +
+    self.bundleHeader + '("' + bundleId + '", [{' +
       Object.keys(modules).map(function(moduleId) {
         return (
           '"' + moduleId + '":' +
@@ -507,8 +503,9 @@ Dynapack.prototype.wrapChunk = function(chunkId, modules) {
   );
 };
 
+
 /**
- *  Write chunks to files.
+ *  Write bundles to files.
  */
 Dynapack.prototype.write = function(done) {
   var self = this;
@@ -535,11 +532,30 @@ Dynapack.prototype.write = function(done) {
 
   var prefix = self.opts.prefix;
 
-  //var entriesChunks = [];
+  if (!self.opts.obfuscate) {
+    // Undo our bundling work.
+    self.bundles = {};
+    _.each(self.modules, function(module, id) {
+      var bundleId = id.replace(/\.js$/, '').replace(/^\//, '');
+      var bundle = self.bundles[bundleId] = {};
+      bundle[id] = module;
+    });
+  }
+
+  //var entriesBundles = [];
   //var entriesBundles = self.entries.map(function(entry) {
   self.entries.forEach(function(entry, index) {
-    var entryChunks = self.requiredChunks(entry);
-    //entriesChunks.push(entryChunks);
+    var entryBundles = self.requiredBundles(entry);
+    //entriesBundles.push(entryBundles);
+    //if (!self.opts.obfuscate) {
+    //  var entryModuleIds = [];
+    //  entryBundles.forEach(function(bundleId) {
+    //    for (var moduleId in self.bundles[bundleId]) {
+    //      entryModuleIds.push(moduleId.replace(/^\//, ''));
+    //    }
+    //  });
+    //  entryBundles = entryModuleIds;
+    //}
 
     var entryId = self.entryIds[index];
     var entryFiles = entryInfo[entryId] = [];
@@ -547,42 +563,41 @@ Dynapack.prototype.write = function(done) {
     var entryBasename = 'entry.' + index + '.js';
     entryFiles.push(prefix + entryBasename);
 
-    entryChunks.forEach(function(chunkId) {
-      entryFiles.push(prefix + chunkId + '.js');
+    entryBundles.forEach(function(bundleId) {
+      entryFiles.push(prefix + bundleId + '.js');
     });
 
     var name = path.join(output, entryBasename);
     files[name] = (
       entryHeader +
       '("' + entry + '",' +
-      JSON.stringify(entryChunks) + ',"' +
+      JSON.stringify(entryBundles) + ',"' +
       prefix + '");'
     );
   });
 
-  // For each chunk, save it as an isolated downloadable chunk
-  // and as a part of all entry bundles to which it belongs.
+  _.each(self.bundles, function(modules, bundleId) {
+    var bundle = self.createBundle(bundleId, modules);
+    var name = path.join(output, bundleId + '.js');
+    files[name] = bundle;
 
-  _.each(self.chunks, function(modules, chunkId) {
-    var chunk = self.wrapChunk(chunkId, modules);
-    var name = path.join(output, chunkId + '.js');
-    files[name] = chunk;
-
-    //for (var i = 0; i < entriesChunks.length; i++) {
-    //  if (entriesChunks[i].indexOf(chunkId) > -1) {
-    //    entriesBundles[i] += chunk;
+    //for (var i = 0; i < entriesBundles.length; i++) {
+    //  if (entriesBundles[i].indexOf(bundleId) > -1) {
+    //    entriesBundles[i] += bundle;
     //  }
     //}
   });
 
-  //entriesBundles.forEach(function(bundle, index) {
-  //  files[path.join(output, 'entry.' + index + '.js')] = bundle;
-  //});
-
   async.each(
     Object.keys(files),
     function(file, written) {
-      fs.writeFile(file, files[file], written);
+      try {
+        mkdirp.sync(path.dirname(file));
+        fs.writeFile(file, files[file], written);
+      }
+      catch (err) {
+        written(err);
+      }
     },
     function(err) {
       if (done) done(err, entryInfo);
