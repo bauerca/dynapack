@@ -332,11 +332,10 @@ above figure:
 
 ![It's a graph](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/graph.png)
 
-Great. Now let's go crazy with bundle-splitting to see how we can *minimize*
-initial page load times (we should mention that the necessity for snappy
-initial page loads may not apply to all apps). The basic principle is this:
-force the client to download only those modules it needs to display the target
-page.
+Great. Now let's look at bundle-splitting and *minimizing* initial page load
+times (we should mention that the necessity for snappy initial page loads may
+not apply to all apps). The basic principle is this: force the client to
+download only those modules it needs to display the target page.
 
 Suppose that the following green triangle at the root of the graph comprises
 those modules common to *all* pages of the app. This group of modules should
@@ -383,66 +382,6 @@ RequireJS or webpack, is formed by hand by the developer via a config file.
 Dynapack strives to assemble these common bundles (and manage the parallel
 downloading of them on the client) for you, because in reality, your dependency
 graph has many "common" bundles (small purple triangles).
-
-
-### Dynapack example
-
-`main.js`: This holds the router that dynamically loads only the javascript
-bundle(s) that are required to display the target page.
-
-```js
-var fetch = require('dyna-fetch')(require);
-
-module.exports = function(path) {
-    var __page = (
-        path === '/home' ?
-        './home' /*js*/ :
-        './not-found' /*js*/
-    );
-
-    fetch(__page, function(page) {
-        document.innerHTML = page;
-    });
-};
-```
-
-
-`home.js`: The homepage requires jQuery and Backbone, statically.
-
-```js
-var $ = require('jquery');
-var backbone = require('backbone');
-module.exports = '<h1>Homepage!</h1>';
-```
-
-`not-found.js`: The 404 page requires jQuery, statically.
-
-```js
-var $ = require('jquery');
-module.exports = '<h1>404: Not found</h1>';
-```
-
-*Without any configuration file*, running `dynapack ./main.js` will produce the
-following bundles:
-
-```
-0.js:
-    - (dynapack loader)
-    - main.js
-1.js:
-    - jquery
-2.js:
-    - not-found.js
-3.js:
-    - home.js
-    - backbone
-```
-
-On a user's first visit, once the initial page loads (and `0.js` runs), if the
-url path is not `/home`, the browser will download `1.js` and `2.js` in
-parallel.  If the url path *is* `/home`, it will download `1.js` and `3.js` in
-parallel.  If the client moves from a not found page to `/home`, only `3.js`
-will be downloaded because `1.js` is cached.
 
 
 # License
