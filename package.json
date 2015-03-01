@@ -1,6 +1,6 @@
 {
   "name": "dynapack",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A module bundler/loader for static and dynamic dependencies.",
   "main": "index.js",
   "bin": {
