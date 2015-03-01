@@ -26,16 +26,15 @@ module.exports = function(app, done) {
   });
   app.use(serveStatic(__dirname + '/bundles'));
 
-  var packer = Dynapack(
-    {
+  var packer = Dynapack({
+    entries: {
       a: __dirname + '/entryA.js',
       b: __dirname + '/entryB.js'
     },
-    {
-      output: __dirname + '/bundles',
-      prefix: this.route + '/'
-    }
-  );
+    output: __dirname + '/bundles',
+    prefix: this.route + '/'
+  });
+
   packer.run(function() {
     packer.write(function(err, entryInfo) {
       scriptsA += entryInfo.a.map(function(script) {

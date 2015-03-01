@@ -1,6 +1,6 @@
 ![Logo](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/logo.png)
 
-Dynapack is a javascript module bundler and client-side bundle loader that
+Dynapack is a javascript module bundler and client-side loader that
 solves the following problem. Given a dependency graph of *static* and
 *dynamic* dependencies, construct a set of module bundles such that
 
@@ -10,12 +10,6 @@ solves the following problem. Given a dependency graph of *static* and
   static dependencies of *D* (recursively),
 - a module (bundle) is sent to a client only once (per session), and
 - bundles connected by static dependencies are sent in parallel.
-
-One of the wonderful consequences of these guarantees is the vanishing of
-configuration options for manipulating the contents of your bundles. Instead,
-dependencies can be added, removed, and swapped (static for dynamic and vice
-versa) with reckless abandon without concern for module duplication or
-wasted bandwidth.
 
 Here is a [complete working example](https://github.com/bauerca/dynapack-example-simple)
 of dynapack.
@@ -58,41 +52,44 @@ is probably the most succinct description of the new technique; code like this
 *will* appear in modules written for dynapack:
 
 ```js
-var fetch = require('dynafetch')(require); // Ugly. Oh well.
+var ensure = require('node-ensure');
 
-var __m = './big-module' /*js*/; // This is a dynamic dependency declaration.
+// This is a dynamic dependency declaration.
+var __m = './big-module' /*js*/;
 
-// This resembles an async require in AMD.
-fetch([__m], function(m) {
-    // Do something with module m.
+// This resembles the CommonJS Modules/Async/A proposal.
+ensure([__m], function(err) {
+  // Now we can require the module.
+  var m = require(__m);
 });
 ```
+
+See https://github.com/bauerca/node-ensure for documentation on node-ensure.
 
 # Installation
 
 ```
-> npm install -g dynapack
+> npm install dynapack
 ```
+
+There is also a command-line interface; installing it globally
+(`npm install -g dynapack`) will get you the `dynapack` command.
 
 # Usage
 
-```
-> dynapack ./entry.js
-```
+- [Dependency syntax](#dependency-syntax)
+- [API](#api)
+- [Command line](#command-line)
 
-where `entry.js` is the entry point to the client-side version of your app. The
-bundles will be installed in a directory named `chunks/` which is created
-alongside `entry.js`. The script `chunks/main.js` should be included in your
-webpage; the `entry.js` module will run as soon as it is loaded.
-
-# Dependency syntax
+## Dependency syntax
 
 The current version of dynapack supports only Node-style syntax for static
 dependencies and only [dynamic dependency
-declarations](#dynamic-dependency-declaration) with [dynafetch](#dynafetch) for
-dynamic dependencies. The following is a brief overview.
+declarations](#dynamic-dependency-declaration) with
+[node-ensure](https://github.com/bauerca/node-ensure) for dynamic dependencies.
+The following is a brief overview.
 
-## Static
+### Static
 
 A static dependency is a dependency that exists at all times.
 It implies synchronous loading, and it suggests that the dependency should
@@ -109,15 +106,15 @@ If your app uses only this type of dependency, dynapack will function
 exactly like [Browserify](http://browserify.org/), and output a single
 bundle for your app. In this case, just use Browserify.
 
-## Dynamic
+### Dynamic
 
 Dynamic dependencies are dependencies that should be loaded/executed only under
 certain conditions. This type of dependency is relevant in the browser
 environment, where the downloading and execution of modules takes up precious
-time. A dynamic dependency that is not needed to display a page does not need
+user time. A dynamic dependency that is not needed to display a page does not need
 to be downloaded, and therefore does not contribute to the page load wait.
 
-### Dynamic dependency declaration
+#### Dynamic dependency declaration
 
 Dynapack supports a new syntax called a *dynamic dependency declaration* (d<sup>3</sup>):
 
@@ -126,9 +123,10 @@ var __bm = './big-module' /*js*/;
 ```
 
 where the important part of the above is the `<string> /*js*/` combination.  A
-d<sup>3</sup> informs dynapack that the decorated string literal is actually a
-dynamic dependency and may be passed to an asynchronous module-loading function
-(e.g. [dynafetch](#dynafetch) below).
+d<sup>3</sup> informs dynapack that the decorated string literal is in fact a
+path to a module whose source (plus the sources of all of its static dependencies)
+should be downloaded on demand at the discretion of the app (using
+[node-ensure](https://github.com/bauerca/node-ensure)).
 
 The advantage of a d<sup>3</sup> is that it is recognized *anywhere* in module
 code (whereas other bundlers recognize dependency strings only as arguments to
@@ -139,30 +137,163 @@ call).
 its similarity to `__filename` and `__dirname` in Node, but you can use
 whatever).
 
-### Dynafetch
+#### node-ensure
 
-Dynapack relies on [dynafetch](https://github.com/bauerca/dynafetch),
+Dynapack relies on [node-ensure](https://github.com/bauerca/node-ensure),
 a dead simple library that provides an
-asynchronous dependency loader similar to AMD-style `require`. Its usage is a
-little unsightly, but, as a result, it *just works* in Node:
+asynchronous dependency loading protocol similar to the CommonJS 
+[Modules/Async/A](http://wiki.commonjs.org/wiki/Modules/Async/A) spec proposal.
+
+It differs from the spec, though, so that things *just work* in Node.js.
 
 ```js
-var fetch = require('dynafetch')(require);
-fetch(['module' /*js*/], function(m) {
-    // ...
+var ensure = require('node-ensure');
+var __superagent = 'superagent' /*js*/;
+
+ensure([__superagent], function(err) {
+  var request = require(__superagent);
+
+  // ...
 });
 ```
 
-As implied by the above snippet, dynafetch is used with
-[d<sup>3</sup>s](#dynamic-dependency-declarations) because the variable name
-assigned to the dynafetch module is arbitrary and therefore cannot be reliably
-parsed by dynapack.
+## API
+
+Configuration options and defaults are:
+
+```js
+var packer = new Dynapack({
+  entries: undefined, // required!
+  output: './bundles',
+  prefix: '/',
+  bundle: true,
+  dynamicLabels: 'js',
+  builtins: require('browserify/lib/builtins'),
+  globalTransforms: []
+});
+```
+
+Use the instance like this:
+
+```js
+packer.run(function(err, bundles) {
+  // Inspect the bundle contents.
+  console.log(bundles);
+  
+  packer.write(function(err, entries) {
+    // Use the entry-point/bundles maps to serve web-pages and
+    // bundles.
+    console.log(entries);
+  });
+});
+```
+
+### Configuration
+
+Passed to the Dynapack constructor.
+
+#### entries {String|Array&lt;String&gt;|Object&lt;String, String&gt;}
+
+This option is the only required option and must identify the (client-side)
+entry point(s) of the app to bundle. The different allowed formats will
+affect only the ouput of the [write()](#writecallback) method.
+
+A string is given when there is only one
+app entry point (e.g. "single-page" apps); an array is given when there are
+many. Alternatively, a mapping between custom ids and entry point paths will
+replace the auto-generated ids used by default by 
+[write()](#writecallback).
+
+For example, when entries is `'./client.js'`, the write method would return
+something like:
+
+```js
+{
+  "./client.js": [
+    "./bundles/entry.0.js",
+    "./bundles/a.js"
+  ]
+}
+```
+
+whereas an entries like `{app: './client.js'}` would produce:
+
+```js
+{
+  "app": [
+    "./bundles/entry.0.js",
+    "./bundles/a.js"
+  ]
+}
+```
+
+#### output {String}
+
+The default value is `"./bundles"`. This is where bundle files are saved.
+
+#### prefix {String}
+
+This is the prefix under which javascript files will be served. This does
+not have to be the same host that serves the app; it could be a CDN somewhere, in
+which case, include the hostname in the prefix.
+
+Should end with a slash. The default is '/'.
+
+#### bundle {Boolean}
+
+Defaults to `true`.
+
+Set to `false` when developing and debugging. If false, Dynapack will treat
+each module as a "bundle" but otherwise act the same (as far as async loading
+in the browser is concerned). Browser loading of js will be much slower,
+however, since the number of "bundles" will skyrocket. Worth it.
+
+#### dynamicLabels {String|Array&lt;String&gt;}
+
+Defaults to `'js'`. This option permits changing the syntax of the comment
+part of a d<sup>3</sup>.
+
+#### builtins
+
+Defaults to `require('browserify/lib/builtins')`. See
+[Browserify](http://browserify.org/) docs.
+
+#### globalTransforms
+
+Defaults to empty array. See
+[Browserify](http://browserify.org/) docs.
+
+### Methods
+
+Available on a Dynapack instance.
+
+#### run(callback)
+
+The callback will receive either an error as first argument or the
+(fairly low-level) results of the bundling process as second.
+
+#### write(callback)
+
+This should be called after a successful run().
+The callback will receive either an error as first argument or information
+regarding the bundles that should be embedded in the webpages (HTML) that
+deliver each app entry point.
 
 
-# In depth
 
-- [Background](#background)
-- [Usage](#usage)
+## Command line
+
+```
+> dynapack ./client.js
+```
+
+where `client.js` is the entry point to the client-side version of your app. The
+bundles will be installed in a directory named `bundles/` which is created
+alongside `client.js`.
+
+The command outputs the groups of bundles that should be included in the webpage
+served for each entry point.
+
 
 ## Background
 

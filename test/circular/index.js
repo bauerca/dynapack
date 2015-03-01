@@ -15,10 +15,12 @@ module.exports = function(app, done) {
 
   app.use(serveStatic(__dirname + '/bundles'));
 
-  var packer = Dynapack(
-    {main: __dirname + '/main.js'},
-    {output: __dirname + '/bundles', prefix: this.route + '/'}
-  );
+  var packer = Dynapack({
+    entries: {main: __dirname + '/main.js'},
+    output: __dirname + '/bundles',
+    prefix: this.route + '/'
+  });
+
   packer.run(function() {
     packer.write(function(err, entryInfo) {
       scripts += entryInfo.main.map(function(script) {

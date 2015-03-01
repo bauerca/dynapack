@@ -16,12 +16,17 @@ var commondir = require('commondir');
 
 var processPath = require.resolve('process/browser.js');
 
-function Dynapack(entries, opts) {
+function Dynapack(opts) {
   if (!(this instanceof Dynapack)) {
-    return new Dynapack(entries, opts);
+    return new Dynapack(opts);
   }
 
   var self = this;
+  var entries = opts.entries;
+
+  if (!entries) {
+    throw new Error('Must supply app entry point(s). Check the "entries" option.');
+  }
 
   // Normalize entries to array and set self.entryIds.
 
@@ -55,7 +60,7 @@ function Dynapack(entries, opts) {
       dynamicLabels: 'js',
       builtins: builtins,
       output: './bundles',
-      obfuscate: false,
+      bundle: true,
       globalTransforms: [],
       prefix: '/' // needs trailing slash!
     },
@@ -399,7 +404,7 @@ Dynapack.prototype.reId = function() {
   self.modules = {};
   _.each(oldModules, function(module, oldId) {
     var newId = (
-      self.opts.obfuscate ?
+      self.opts.bundle ?
       module.index.toString() :
       oldId.slice(base.length)
     );
@@ -424,7 +429,7 @@ Dynapack.prototype.reId = function() {
 
   function reIdModule(id) {
     return (
-      self.opts.obfuscate ?
+      self.opts.bundle ?
       self.modules[id].index.toString() :
       id.slice(base.length)
     );
@@ -532,7 +537,7 @@ Dynapack.prototype.write = function(done) {
 
   var prefix = self.opts.prefix;
 
-  if (!self.opts.obfuscate) {
+  if (!self.opts.bundle) {
     // Undo our bundling work.
     self.bundles = {};
     _.each(self.modules, function(module, id) {
@@ -547,7 +552,7 @@ Dynapack.prototype.write = function(done) {
   self.entries.forEach(function(entry, index) {
     var entryBundles = self.requiredBundles(entry);
     //entriesBundles.push(entryBundles);
-    //if (!self.opts.obfuscate) {
+    //if (!self.opts.bundle) {
     //  var entryModuleIds = [];
     //  entryBundles.forEach(function(bundleId) {
     //    for (var moduleId in self.bundles[bundleId]) {

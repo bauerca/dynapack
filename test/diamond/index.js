@@ -31,13 +31,12 @@ module.exports = function(app, done) {
     );
   });
 
-  var packer = Dynapack(
-    {main: __dirname + '/a.js'},
-    {
-      output: __dirname + '/bundles',
-      prefix: iso.route + '/'
-    }
-  );
+  var packer = Dynapack({
+    entries: {main: __dirname + '/a.js'},
+    output: __dirname + '/bundles',
+    prefix: iso.route + '/'
+  });
+
   packer.run(function(err) {
     if (err) done(err);
     else {

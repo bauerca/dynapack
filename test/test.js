@@ -11,7 +11,10 @@ var iso = require('osh-iso-test');
 
 describe('dynapack', function() {
   it('should produce 4 bundles from a dep diamond', function(done) {
-    var packer = dynapack(__dirname + '/diamond/a.js');
+    var packer = dynapack({
+      entries: __dirname + '/diamond/a.js'
+    });
+
     packer.run(function(err, chunks) { 
       if (err) done(err);
       else {
@@ -23,7 +26,10 @@ describe('dynapack', function() {
   });
 
   it('should inject process global', function(done) {
-    var packer = dynapack(__dirname + '/usesProcess.js');
+    var packer = dynapack({
+      entries: __dirname + '/usesProcess.js'
+    });
+
     packer.run(function(err, chunks) { 
       if (err) done(err);
       else {
@@ -35,11 +41,13 @@ describe('dynapack', function() {
   });
 
   it('should pass global transforms to module-deps', function(done) {
-    var packer = dynapack(__dirname + '/usesEnv.js', {
+    var packer = dynapack({
+      entries: __dirname + '/usesEnv.js',
       globalTransforms: [
         envify({HOST: 'website.org', PORT: '80'})
       ]
     });
+
     packer.run(function(err, chunks) { 
       if (err) done(err);
       else {

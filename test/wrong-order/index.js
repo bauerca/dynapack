@@ -32,13 +32,12 @@ module.exports = function(app, done) {
     }
   });
 
-  var packer = Dynapack(
-    {main: __dirname + '/main.js'},
-    {
-      output: __dirname + '/bundles',
-      prefix: iso.route + '/'
-    }
-  );
+  var packer = Dynapack({
+    entries: {main: __dirname + '/main.js'},
+    output: __dirname + '/bundles',
+    prefix: iso.route + '/'
+  });
+
   packer.run(function() {
     packer.write(function(err, entryInfo) {
       scripts += entryInfo.main.map(function(script) {
