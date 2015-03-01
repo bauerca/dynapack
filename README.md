@@ -40,21 +40,17 @@ general case on the *bundle* level.
 
 # Audience
 
-At the moment, dynapack is for developers who prefer Node's CommonJS module
-system (which probably includes those developers building isomorphic web apps);
-modules written in dynapack syntax will *just run* under Node.
-In principle, nothing prevents support for other module systems like AMD; if
-the demand is there, the support will follow.
-
-Because Node disregards asynchronous module loading, a nonstandard technique
-was implemented which may further trim dynapack's audience. The following snippet
-is probably the most succinct description of the new technique; code like this
-*will* appear in modules written for dynapack:
+Dynapack was built with Node.js and isomorphism in mind; modules written in
+dynapack syntax will *just run* under Node.js.  The following technique
+(introduced by example) was devised to fake asynchronous module loading in
+Node.js without breaking things; code like this *will* appear in modules
+written for dynapack:
 
 ```js
 var ensure = require('node-ensure');
 
-// This is a dynamic dependency declaration.
+// This is a dynamic dependency declaration, which tells dynapack to load this
+// module on demand in the browser. More on this later.
 var __m = './big-module' /*js*/;
 
 // This resembles the CommonJS Modules/Async/A proposal.
@@ -83,7 +79,7 @@ There is also a command-line interface; installing it globally
 
 ## Dependency syntax
 
-The current version of dynapack supports only Node-style syntax for static
+The current version of dynapack supports only Node.js-style syntax for static
 dependencies and only [dynamic dependency
 declarations](#dynamic-dependency-declaration) with
 [node-ensure](https://github.com/bauerca/node-ensure) for dynamic dependencies.
@@ -95,7 +91,7 @@ A static dependency is a dependency that exists at all times.
 It implies synchronous loading, and it suggests that the dependency should
 be delivered to a client along with the dependent module.
 
-The Node CommonJS style is supported, in which a static dependency is a simple
+The CommonJS style is supported, in which a static dependency is a simple
 `require` statement.
 
 ```js
@@ -108,11 +104,10 @@ bundle for your app. In this case, just use Browserify.
 
 ### Dynamic
 
-Dynamic dependencies are dependencies that should be loaded/executed only under
-certain conditions. This type of dependency is relevant in the browser
-environment, where the downloading and execution of modules takes up precious
-user time. A dynamic dependency that is not needed to display a page does not need
-to be downloaded, and therefore does not contribute to the page load wait.
+Dynamic dependencies are dependencies that should be loaded/executed only on
+demand. This type of dependency is relevant in the browser,
+where the downloading and execution of modules takes up precious
+user time.
 
 #### Dynamic dependency declaration
 
@@ -134,7 +129,7 @@ code (whereas other bundlers recognize dependency strings only as arguments to
 call).
 
 (I like to use the double underscore for a d<sup>3</sup> variable because of
-its similarity to `__filename` and `__dirname` in Node, but you can use
+its similarity to `__filename` and `__dirname` in Node.js, but you can use
 whatever).
 
 #### node-ensure
@@ -304,7 +299,7 @@ module bundling to prepare for understanding the purpose of dynapack.
 
 A modern javascript-heavy web app consists of a bunch of javascript files
 (called modules) all tied together by some kind of module-loading scheme like
-CommonJS (Node, Browserify) or AMD (RequireJS). Such an app can be modeled as a
+CommonJS (Node.js, Browserify) or AMD (RequireJS). Such an app can be modeled as a
 dependency tree, which we'll represent as this big triangle:
 
 ![All modules](https://raw.githubusercontent.com/bauerca/dynapack/master/assets/all-modules.png)
