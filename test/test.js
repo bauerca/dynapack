@@ -64,8 +64,8 @@ describe('dynapack', function() {
       basedir: __dirname,
       tests: [
         'diamond',
-        'wrong-order',
         'circular',
+        'wrong-order',
         'simultaneous',
         'entries'
       ],

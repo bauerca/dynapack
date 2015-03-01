@@ -1,10 +1,10 @@
 var fs = require('fs');
 var Dynapack = require('../..');
 
-  /**
-   *  In this test, the entry bundle arrives at the client much later than
-   *  a chunk on which it depends dynamically.
-   */
+/**
+ *  In this test, the entry bundle arrives at the client much later than
+ *  a chunk on which it depends dynamically.
+ */
 
 module.exports = function(app, done) {
   var iso = this;

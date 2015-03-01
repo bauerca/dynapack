@@ -1,23 +1,25 @@
-var fetch = require('dynafetch')(require);
-var __a = __dirname + '/a.js' /*js*/;
+var ensure = require('node-ensure');
+var __a = './a.js' /*js*/;
 var latency = require('./latency');
 
 
 var a1;
 var a2;
 
-fetch([__a], function(a) {
+ensure([__a], function(err) {
+  var a = require(__a);
   if (a !== 'a') {
-    iso.report('Failure: on first fetch');
+    iso.report('Failure: on first ensure');
   }
   else if (a === a2) iso.report('Success');
   a1 = a;
 });
 
 setTimeout(function() {
-  fetch([__a], function(a) {
+  ensure([__a], function(err) {
+    var a = require(__a);
     if (a !== 'a') {
-      iso.report('Failure: on second fetch');
+      iso.report('Failure: on second ensure');
     }
     else if (a === a1) iso.report('Success');
     a2 = a;

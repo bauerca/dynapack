@@ -1,7 +1,8 @@
 var __other = './other' /*js*/;
-var fetch = require('dynafetch')(require);
+var ensure = require('node-ensure');
 
-fetch([__other], function(other) {
+ensure([__other], function(err) {
+  var other = require(__other);
   if (other === 'other module') {
     iso.report('passed');
   } else {

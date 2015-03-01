@@ -1,7 +1,7 @@
-var __b = './b' /*js*/;
-var __c = './c' /*js*/;
-var fetch = require('dynafetch')(require);
+var ensure = require('node-ensure');
 var latency = require('./latency');
+var b = './b' /*js*/;
+var c = './c' /*js*/;
 
 var notify = document.getElementById('notify');
 
@@ -15,7 +15,7 @@ var notify = document.getElementById('notify');
 setTimeout(function() {
   notify.innerHTML = 'fetching module c...';
   var start = (new Date()).getTime();
-  fetch([__c], function(c) {
+  ensure([c], function(err) {
     notify.innerHTML = (
       'Expect ' + latency.toString() + 'ms load time. ' +
       'Time taken: ' +

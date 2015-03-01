@@ -571,8 +571,11 @@ Dynapack.prototype.write = function(done) {
     files[name] = (
       entryHeader +
       '("' + entry + '",' +
-      JSON.stringify(entryBundles) + ',"' +
-      prefix + '");'
+      JSON.stringify(entryBundles) + ',' +
+      JSON.stringify({
+        prefix: prefix
+      }) +
+      ');'
     );
   });
 

@@ -1,11 +1,11 @@
-var fetch = require('dynafetch')(require);
-var __a = __dirname + '/a.js' /*js*/;
+var ensure = require('node-ensure');
+var a = './a.js' /*js*/;
 
 var canceled;
-
 var sync1;
 
-fetch([__a], function(a1) {
+ensure([a], function(err) {
+  var a1 = require(a);
   sync1 = true;
   if (a1 !== 'a') {
     iso.fail('on first fetch');
@@ -13,7 +13,8 @@ fetch([__a], function(a1) {
   else {
     var sync2;
 
-    fetch([__a], function(a2) {
+    ensure([a], function(err) {
+      var a2 = require(a);
       sync2 = true;
       iso.report(
         a1 === a2 ? 'Success' : 'Failure: modules were different'
