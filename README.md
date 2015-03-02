@@ -278,17 +278,28 @@ deliver each app entry point.
 
 ## Command line
 
+All options are optional.
+
 ```
-> dynapack ./client.js
+> dynapack \
+    (-o|--output) <output-directory> \
+    (-p|--prefix) <string> \
+    (-d|--debug) \
+    <entry-point> <entry-point> ...
 ```
 
-where `client.js` is the entry point to the client-side version of your app. The
-bundles will be installed in a directory named `bundles/` which is created
-alongside `client.js`.
+For example
 
-The command outputs the groups of bundles that should be included in the webpage
-served for each entry point.
+```bash
+dynapack -d -o ./test-bundles -p /scripts/ app.js
+```
 
+where `app.js` is the sole entry point to the client-side version of your app.
+The bundles will be installed in the directory specified by the (-o|--output)
+option (defaults to `./bundles`).
+
+The command prints lots of stuff, including the groups of bundles that should
+be included in the webpage served for each entry point.
 
 ## Background
 
