@@ -547,7 +547,7 @@ Dynapack.prototype.write = function(done) {
   var entryHeader = fs.readFileSync(__dirname + '/lib/entry.js');
 
   var graph = {
-    entries: [],
+    entries: {},
     bundles: {}
   };
 
@@ -583,17 +583,19 @@ Dynapack.prototype.write = function(done) {
     //  entryBundles = entryModuleIds;
     //}
 
-    graph.entries.push(entryBundles.concat());
-
     var entryId = self.entryIds[index];
     var entryFiles = entryInfo[entryId] = [];
-
     var entryBasename = 'entry.' + index + '.js';
+
     entryFiles.push(prefix + entryBasename);
 
     entryBundles.forEach(function(bundleId) {
       entryFiles.push(prefix + bundleId + '.js');
     });
+
+    graph.entries[entryId] = [entryBasename].concat(
+      entryBundles.map(function(bundleId) {return bundleId + '.js'})
+    );
 
     var name = path.join(output, entryBasename);
     files[name] = (
@@ -610,11 +612,14 @@ Dynapack.prototype.write = function(done) {
   _.each(self.bundles, function(modules, bundleId) {
     // Form union of all other bundles brought in by given bundle.
     //console.log(JSON.stringify(self.getBundleRoots(bundleId, modules), null, 2));
-    graph.bundles[bundleId] = union.apply(
+    graph.bundles[bundleId + '.js'] = union.apply(
       null,
       values(
         self.getBundleRoots(bundleId, modules)
       )
+    )
+    .map(
+      function(bundleId) {return bundleId + '.js'}
     );
 
     var bundle = self.renderBundle(bundleId, modules);

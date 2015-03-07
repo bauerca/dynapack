@@ -27,8 +27,10 @@ describe('dynapack', function() {
 
   it('should write graph.json', function(done) {
     var output = __dirname + '/diamond/bundles';
+    var entry = __dirname + '/diamond/a.js';
+
     var packer = dynapack({
-      entries: __dirname + '/diamond/a.js',
+      entries: entry,
       output: output,
       bundle: true
     });
@@ -45,10 +47,13 @@ describe('dynapack', function() {
               fs.readFileSync(output + '/graph.json')
             );
             //console.log(JSON.stringify(graph, null, 2));
-            expect(graph.entries.length).to.be(1);
-            expect(graph.entries[0].length).to.be(1);
+            var expected = {"entries":{},"bundles":{"1.js":["2.js","6.js","4.js"],"2.js":[],"4.js":[],"6.js":[]}};
+            expected.entries[entry] = ["entry.0.js","1.js"];
+            expect(graph).to.eql(expected);
+            expect(Object.keys(graph.entries).length).to.be(1);
+            expect(graph.entries[entry].length).to.be(2);
             expect(Object.keys(graph.bundles).length).to.be(4);
-            expect(graph.bundles[1].length).to.be(3);
+            expect(graph.bundles['1.js'].length).to.be(3);
           }
           done();
         });
