@@ -8,6 +8,8 @@ var mkdirp = require('mkdirp');
 var extend = require('xtend');
 var async = require('async');
 var _ = require('underscore');
+var union = require('lodash/array/union');
+var values = require('lodash/object/values');
 var encodeBits = require('./lib/encode-bits');
 var insertGlobals = require('insert-module-globals');
 var commondir = require('commondir');
@@ -476,14 +478,15 @@ Dynapack.prototype.wrapModule = function(module) {
 
 
 /**
+ *  A bundle brings with it a new set of dynamic deps (roots), not defined
+ *  in any other bundle. The client must be informed of the new bundles
+ *  this introduces. 'roots' is a mapping from root module id
+ *  to an array of bundles.
  */
-Dynapack.prototype.createBundle = function(bundleId, modules) {
+
+Dynapack.prototype.getBundleRoots = function(bundleId, modules) {
   var self = this;
 
-  // A bundle brings with it a new set of dynamic deps (roots), not defined
-  // in any other bundle. The client must be informed of the new bundles
-  // this introduces. 'roots' is a mapping from root module id
-  // to an array of bundles.
   var roots = {};
   _.each(modules, function(module) {
     _.each(module.dynamic, function(id) {
@@ -491,19 +494,32 @@ Dynapack.prototype.createBundle = function(bundleId, modules) {
     });
   });
 
+  return roots;
+};
+
+/**
+ *  Returns javascript for bundle, which includes module sources, and
+ *  pulled in roots.
+ */
+
+Dynapack.prototype.renderBundle = function(bundleId, modules) {
+  var self = this;
+
   if (!self.bundleHeader) {
     self.bundleHeader = fs.readFileSync(__dirname + '/lib/bundle.js');
   }
 
   return (
     self.bundleHeader + '("' + bundleId + '", [{' +
-      Object.keys(modules).map(function(moduleId) {
-        return (
-          '"' + moduleId + '":' +
-          self.wrapModule(modules[moduleId])
-        );
-      }).join(',') + '},' +
-    JSON.stringify(roots) +
+    Object.keys(modules).map(function(moduleId) {
+      return (
+        '"' + moduleId + '":' +
+        self.wrapModule(modules[moduleId])
+      );
+    }).join(',') + '},' +
+    JSON.stringify(
+      this.getBundleRoots(bundleId, modules)
+    ) +
     ']);'
   );
 };
@@ -529,6 +545,11 @@ Dynapack.prototype.write = function(done) {
   }
 
   var entryHeader = fs.readFileSync(__dirname + '/lib/entry.js');
+
+  var graph = {
+    entries: [],
+    bundles: {}
+  };
 
   // Mapping from original entry path string to array of
   // output-dir-relative js files that should be included in the entry
@@ -562,6 +583,8 @@ Dynapack.prototype.write = function(done) {
     //  entryBundles = entryModuleIds;
     //}
 
+    graph.entries.push(entryBundles.concat());
+
     var entryId = self.entryIds[index];
     var entryFiles = entryInfo[entryId] = [];
 
@@ -585,7 +608,16 @@ Dynapack.prototype.write = function(done) {
   });
 
   _.each(self.bundles, function(modules, bundleId) {
-    var bundle = self.createBundle(bundleId, modules);
+    // Form union of all other bundles brought in by given bundle.
+    //console.log(JSON.stringify(self.getBundleRoots(bundleId, modules), null, 2));
+    graph.bundles[bundleId] = union.apply(
+      null,
+      values(
+        self.getBundleRoots(bundleId, modules)
+      )
+    );
+
+    var bundle = self.renderBundle(bundleId, modules);
     var name = path.join(output, bundleId + '.js');
     files[name] = bundle;
 
@@ -595,6 +627,12 @@ Dynapack.prototype.write = function(done) {
     //  }
     //}
   });
+
+  // Write the graph.
+  fs.writeFileSync(
+    path.join(output, 'graph.json'),
+    JSON.stringify(graph)
+  );
 
   async.each(
     Object.keys(files),

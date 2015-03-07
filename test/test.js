@@ -25,6 +25,37 @@ describe('dynapack', function() {
     });
   });
 
+  it('should write graph.json', function(done) {
+    var output = __dirname + '/diamond/bundles';
+    var packer = dynapack({
+      entries: __dirname + '/diamond/a.js',
+      output: output,
+      bundle: true
+    });
+
+    packer.run(function(err, chunks) { 
+      if (err) done(err);
+      else {
+        //console.log(JSON.stringify(chunks, null, 2));
+        expect(Object.keys(chunks).length).to.be(4);
+        packer.write(function(err, entryInfo) {
+          if (err) done(err);
+          else {
+            var graph = JSON.parse(
+              fs.readFileSync(output + '/graph.json')
+            );
+            //console.log(JSON.stringify(graph, null, 2));
+            expect(graph.entries.length).to.be(1);
+            expect(graph.entries[0].length).to.be(1);
+            expect(Object.keys(graph.bundles).length).to.be(4);
+            expect(graph.bundles[1].length).to.be(3);
+          }
+          done();
+        });
+      }
+    });
+  });
+
   it('should inject process global', function(done) {
     var packer = dynapack({
       entries: __dirname + '/usesProcess.js'

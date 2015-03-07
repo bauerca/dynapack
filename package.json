@@ -17,6 +17,7 @@
     "commondir": "0.0.1",
     "esprima": "~1.2.2",
     "insert-module-globals": "^6.0.0",
+    "lodash": "^3.4.0",
     "minimist": "^0.1.0",
     "mkdirp": "^0.5.0",
     "module-deps": "~2.1.0",
