@@ -10,20 +10,112 @@ var morgan = require('morgan');
 var iso = require('osh-iso-test');
 
 describe('dynapack', function() {
-  it('should produce 4 bundles from a dep diamond', function(done) {
-    var packer = dynapack({
-      entries: __dirname + '/diamond/a.js'
-    });
+  it('should produce single bundle and entry', function(done) {
+    var packer = dynapack();
+    var mcount = 0;
+    var bcount = 0;
 
-    packer.run(function(err, chunks) { 
-      if (err) done(err);
-      else {
-        //console.log(JSON.stringify(chunks, null, 2));
-        expect(Object.keys(chunks).length).to.be(4);
-        done();
+    packer.on('readable', function() {
+      var bundle;
+
+      while (bundle = this.read()) {
+        bcount++;
+        if (!bundle.entry) mcount += bundle.modules.length;
       }
     });
+
+    packer.once('error', done);
+    packer.once('finish', function() {
+      expect(mcount).to.be(1);
+      expect(bcount).to.be(2); // 1 entry, and 1 bundle
+      done();
+    });
+
+    packer.writeEntry(__dirname + '/diamond/d.js');
+    packer.end();
   });
+
+  it('should produce 4 bundles from a dep diamond', function(done) {
+    var packer = dynapack();
+    var bcount = 0;
+
+    packer.on('readable', function() {
+      var bundle;
+
+      while (bundle = this.read()) {
+        bcount++;
+      }
+    });
+
+    packer.once('error', done);
+    packer.once('finish', function() {
+      expect(bcount).to.be(5); // plus one entry.
+      done();
+    });
+
+    packer.writeEntry(__dirname + '/diamond/a.js');
+    packer.end();
+  });
+
+  it('should handle twice-written entry', function(done) {
+    var packer = dynapack();
+    var bcount = 0;
+
+    packer.on('readable', function() {
+      var bundle;
+
+      while (bundle = this.read()) {
+        bcount++;
+      }
+    });
+
+    packer.once('error', done);
+    packer.once('finish', function() {
+      expect(bcount).to.be(5);
+      done();
+    });
+
+    packer.writeEntry(__dirname + '/diamond/a.js');
+    packer.write(__dirname + '/diamond/a.js');
+    packer.end();
+  });
+
+  /**
+   *  Bundle the diamond, then "change" the base of the diamond by
+   *  resubmitting d.js to the pack. Only the d.js-containing bundle
+   *  should be re-emitted by the pack.
+   */
+
+  it('should handle updates', function(done) {
+    var packer = dynapack();
+    var bcount = 0;
+    var updated = false;
+
+    packer.on('readable', function() {
+      var bundle;
+
+      while (bundle = this.read()) {
+        bcount++;
+      }
+
+      if (updated) {
+        packer.end();
+      }
+      else {
+        packer.write(__dirname + '/diamond/d.js');
+        updated = true;
+      }
+    });
+
+    packer.once('error', done);
+    packer.once('finish', function() {
+      expect(bcount).to.be(6);
+      done();
+    });
+
+    packer.writeEntry(__dirname + '/diamond/a.js');
+  });
+
 
   it('should write graph.json', function(done) {
     var output = __dirname + '/diamond/bundles';
@@ -47,13 +139,12 @@ describe('dynapack', function() {
               fs.readFileSync(output + '/graph.json')
             );
             //console.log(JSON.stringify(graph, null, 2));
-            var expected = {"entries":{},"bundles":{"1.js":["2.js","6.js","4.js"],"2.js":[],"4.js":[],"6.js":[]}};
-            expected.entries[entry] = ["entry.0.js","1.js"];
-            expect(graph).to.eql(expected);
+            expect(graph.prefix).to.be.ok();
             expect(Object.keys(graph.entries).length).to.be(1);
             expect(graph.entries[entry].length).to.be(2);
+            // Test the diamond.
             expect(Object.keys(graph.bundles).length).to.be(4);
-            expect(graph.bundles['1.js'].length).to.be(3);
+            expect(Object.keys(graph.bundles['1.js']).length).to.be(2);
           }
           done();
         });
@@ -102,119 +193,119 @@ describe('dynapack', function() {
     server && server.close();
   });
 
-  it('should pass browser tests', function(done) {
+  it.only('should pass browser tests', function(done) {
     this.timeout(0);
     iso({
       basedir: __dirname,
       tests: [
-        'diamond',
-        'circular',
-        'wrong-order',
-        'simultaneous',
-        'entries'
+        'diamond'
+        //'circular',
+        //'wrong-order',
+        //'simultaneous',
+        //'entries'
       ],
       manual: false
     }, done);
   });
 
-//    var browserTests = require('./browser-tests');
-//    var app = express();
-//
-//    async.each(
-//      browserTests,
-//      function(test, callback) {
-//        var testDir = __dirname + test.path + '/';
-//        var entries = {};
-//
-//        test.entries.forEach(function(entry) {
-//          entries[entry] = testDir + entry;
-//        });
-//
-//        var packer = dynapack(
-//          entries,
-//          {
-//            output: testDir + 'bundles',
-//            prefix: test.path
-//          }
-//        );
-//        packer.run(function(chunks) { 
-//          packer.write(function(err, entryInfo) {
-//            console.log(JSON.stringify(entryInfo, null, 2));
-//            test.entryInfo = entryInfo;
-//            test.scripts = function(entry) {
-//              return entryInfo[entry].map(function(script) {
-//                return '<script type="text/javascript" async src="' + script + '"></script>';
-//              }).join('')
-//            };
-//            callback(err);
-//          });
-//        });
-//      },
-//      function() {
-//        
-//        var results = '';
-//
-//        function getResults(query) {
-//          if (Object.keys(query).length) {
-//            results += (
-//              '<li>' +
-//                query.test + ': ' +
-//                query.result +
-//              '</li>'
-//            );
-//          }
-//        }
-//
-//        var firstVisit = true;
-//
-//        var app = express();
-//        app.use(morgan('combined'));
-//        app.get('/', function(req, res) {
-//          res.send(
-//            '<html><head></head><body>' +
-//            (
-//              firstVisit ?
-//              (
-//                '<script>location = "' +
-//                browserTests[0].path +
-//                '";</script>'
-//              ) :
-//              '<ul>' + results + '</ul>'
-//            ) +
-//            '</script></body></html>'
-//          );
-//          !firstVisit && done();
-//          firstVisit = false;
-//        });
-//        app.get('/finished', function(req, res) {
-//          getResults(req.query);
-//          res.redirect('/');
-//        });
-//
-//        browserTests.forEach(function(test) {
-//          app.use(test.path, function(req, res) {
-//            getResults(req.query);
-//            test.middleware(req, res);
-//          });
-//        });
-//
-//        var port = 3333;
-//        server = http.createServer(app);
-//        server.listen(port, function() {
-//          console.log(
-//            '\n\nPoint browser to localhost:' + port,
-//            'to complete testing. CTRL-C to abort.'
-//          );
-//        });
-//      }
-//    );
-//
-//    process.on('SIGINT', function() {
-//      console.log('Stopping server...');
-//      server && server.close();
-//      process.exit();
-//    });
-//  });
+  //    var browserTests = require('./browser-tests');
+  //    var app = express();
+  //
+  //    async.each(
+  //      browserTests,
+  //      function(test, callback) {
+  //        var testDir = __dirname + test.path + '/';
+  //        var entries = {};
+  //
+  //        test.entries.forEach(function(entry) {
+  //          entries[entry] = testDir + entry;
+  //        });
+  //
+  //        var packer = dynapack(
+  //          entries,
+  //          {
+  //            output: testDir + 'bundles',
+  //            prefix: test.path
+  //          }
+  //        );
+  //        packer.run(function(chunks) { 
+  //          packer.write(function(err, entryInfo) {
+  //            console.log(JSON.stringify(entryInfo, null, 2));
+  //            test.entryInfo = entryInfo;
+  //            test.scripts = function(entry) {
+  //              return entryInfo[entry].map(function(script) {
+  //                return '<script type="text/javascript" async src="' + script + '"></script>';
+  //              }).join('')
+  //            };
+  //            callback(err);
+  //          });
+  //        });
+  //      },
+  //      function() {
+  //        
+  //        var results = '';
+  //
+  //        function getResults(query) {
+  //          if (Object.keys(query).length) {
+  //            results += (
+  //              '<li>' +
+  //                query.test + ': ' +
+  //                query.result +
+  //              '</li>'
+  //            );
+  //          }
+  //        }
+  //
+  //        var firstVisit = true;
+  //
+  //        var app = express();
+  //        app.use(morgan('combined'));
+  //        app.get('/', function(req, res) {
+  //          res.send(
+  //            '<html><head></head><body>' +
+  //            (
+  //              firstVisit ?
+  //              (
+  //                '<script>location = "' +
+  //                browserTests[0].path +
+  //                '";</script>'
+  //              ) :
+  //              '<ul>' + results + '</ul>'
+  //            ) +
+  //            '</script></body></html>'
+  //          );
+  //          !firstVisit && done();
+  //          firstVisit = false;
+  //        });
+  //        app.get('/finished', function(req, res) {
+  //          getResults(req.query);
+  //          res.redirect('/');
+  //        });
+  //
+  //        browserTests.forEach(function(test) {
+  //          app.use(test.path, function(req, res) {
+  //            getResults(req.query);
+  //            test.middleware(req, res);
+  //          });
+  //        });
+  //
+  //        var port = 3333;
+  //        server = http.createServer(app);
+  //        server.listen(port, function() {
+  //          console.log(
+  //            '\n\nPoint browser to localhost:' + port,
+  //            'to complete testing. CTRL-C to abort.'
+  //          );
+  //        });
+  //      }
+  //    );
+  //
+  //    process.on('SIGINT', function() {
+  //      console.log('Stopping server...');
+  //      server && server.close();
+  //      process.exit();
+  //    });
+  //  });
 
 });
 

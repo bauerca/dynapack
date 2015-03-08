@@ -1,6 +1,8 @@
 var latency = require('./latency');
 var fs = require('fs');
 var Dynapack = require('../..');
+var mkdirp = require('mkdirp');
+var path = require('path');
 
 module.exports = function(app, done) {
   var iso = this;
@@ -31,22 +33,35 @@ module.exports = function(app, done) {
     );
   });
 
+  var output = __dirname + '/bundles';
+
+  mkdirp.sync(output);
+
   var packer = Dynapack({
-    entries: {main: __dirname + '/a.js'},
-    output: __dirname + '/bundles',
-    prefix: iso.route + '/'
+    prefix: iso.route + '/',
+    debug: false
   });
 
-  packer.run(function(err) {
-    if (err) done(err);
-    else {
-      packer.write(function(err, entryInfo) {
-        if (err) return done(err);
-        scripts = entryInfo.main.map(function(script) {
-          return '<script async src="' + script + '"></script>';
-        }).join('');
-        done();
-      });
-    }
+  packer.on('data', function(bundle) {
+    var file = output + '/' + bundle.id;
+
+    mkdirp.sync(
+      path.dirname(file)
+    );
+
+    fs.writeFileSync(
+      output + '/' + bundle.id,
+      bundle.source
+    );
   });
+
+  packer.once('finish', function() {
+    scripts = packer.scripts('main');
+    done();
+  });
+
+  packer.once('error', done);
+
+  packer.writeEntry('main', __dirname + '/a.js');
+  packer.end();
 };
