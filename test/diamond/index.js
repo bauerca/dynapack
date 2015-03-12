@@ -1,8 +1,7 @@
 var latency = require('./latency');
 var fs = require('fs');
-var Dynapack = require('../..');
-var mkdirp = require('mkdirp');
-var path = require('path');
+var dynapack = require('../..');
+var BundleSaver = require('../bundle-saver');
 
 module.exports = function(app, done) {
   var iso = this;
@@ -35,33 +34,22 @@ module.exports = function(app, done) {
 
   var output = __dirname + '/bundles';
 
-  mkdirp.sync(output);
-
-  var packer = Dynapack({
+  var pack = dynapack({
     prefix: iso.route + '/',
     debug: false
   });
 
-  packer.on('data', function(bundle) {
-    var file = output + '/' + bundle.id;
+  pack.on('readable', BundleSaver({dir: output}));
 
-    mkdirp.sync(
-      path.dirname(file)
-    );
-
-    fs.writeFileSync(
-      output + '/' + bundle.id,
-      bundle.source
-    );
-  });
-
-  packer.once('finish', function() {
-    scripts = packer.scripts('main');
+  pack.once('end', function() {
+    scripts = pack.scripts('main');
     done();
   });
 
-  packer.once('error', done);
+  pack.once('error', done);
 
-  packer.writeEntry('main', __dirname + '/a.js');
-  packer.end();
+  pack.end({
+    name: 'main',
+    id: __dirname + '/a.js'
+  });
 };

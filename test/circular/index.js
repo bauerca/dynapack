@@ -1,5 +1,6 @@
 var Dynapack = require('../..');
 var serveStatic = require('serve-static');
+var BundleSaver = require('../bundle-saver');
 
 module.exports = function(app, done) {
   var scripts = this.iso;
@@ -15,18 +16,16 @@ module.exports = function(app, done) {
 
   app.use(serveStatic(__dirname + '/bundles'));
 
-  var packer = Dynapack({
-    entries: {main: __dirname + '/main.js'},
-    output: __dirname + '/bundles',
-    prefix: this.route + '/'
-  });
+  var packer = Dynapack({prefix: this.route + '/'});
 
-  packer.run(function() {
-    packer.write(function(err, entryInfo) {
-      scripts += entryInfo.main.map(function(script) {
-        return '<script async src="' + script + '"></script>';
-      }).join('');
-      done();
-    });
+  packer.on('readable', BundleSaver({dir: __dirname + '/bundles'}));
+  packer.once('end', done);
+  packer.once('error', done);
+  packer.end({name: 'main', id: __dirname + '/main.js'});
+
+  packer.on('bundled', function(graph) {
+    scripts = iso.iso + graph.entries.main.map(function(script) {
+      return '<script async src="' + packer.opts.prefix + script + '"></script>';
+    }).join('');
   });
 };

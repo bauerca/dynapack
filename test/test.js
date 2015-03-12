@@ -3,11 +3,14 @@ var through = require('through2');
 var expect = require('expect.js');
 var express = require('express');
 var fs = require('fs');
+var path = require('path');
 var http = require('http');
 var async = require('async');
 var envify = require('envify/custom');
 var morgan = require('morgan');
 var iso = require('osh-iso-test');
+var through2 = require('through2');
+var InsertGlobals = require('insert-module-globals');
 
 describe('dynapack', function() {
   it('should produce single bundle and entry', function(done) {
@@ -25,13 +28,13 @@ describe('dynapack', function() {
     });
 
     packer.once('error', done);
-    packer.once('finish', function() {
+    packer.once('end', function() {
       expect(mcount).to.be(1);
       expect(bcount).to.be(2); // 1 entry, and 1 bundle
       done();
     });
 
-    packer.writeEntry(__dirname + '/diamond/d.js');
+    packer.write(__dirname + '/diamond/d.js');
     packer.end();
   });
 
@@ -48,13 +51,41 @@ describe('dynapack', function() {
     });
 
     packer.once('error', done);
-    packer.once('finish', function() {
+    packer.once('end', function() {
       expect(bcount).to.be(5); // plus one entry.
       done();
     });
 
-    packer.writeEntry(__dirname + '/diamond/a.js');
-    packer.end();
+    packer.end(__dirname + '/diamond/a.js');
+  });
+
+  it('should emit the graph', function(done) {
+    var packer = dynapack();
+
+    //var expectedGraph = JSON.parse(
+    //  fs.readFileSync(
+    //    __dirname + '/diamond/graph.json',
+    //    {encoding: 'utf8'}
+    //  )
+    //  .replace(
+    //    /DIR/g,
+    //    path.resolve(__dirname, '..')
+    //  )
+    //);
+
+    packer.on('bundled', function(graph) {
+      //console.log(JSON.stringify(graph, null, 2));
+      //expect(graph).to.eql(expectedGraph);
+      expect(Object.keys(graph.modules).length).to.be(6);
+      expect(Object.keys(graph.bundles).length).to.be(4);
+      expect(Object.keys(graph.entries).length).to.be(1);
+      expect(graph.entries.a.length).to.be(2);
+    });
+
+    packer.once('error', done);
+    packer.once('end', done);
+    packer.end(__dirname + '/diamond/a.js');
+    packer.resume();
   });
 
   it('should handle twice-written entry', function(done) {
@@ -70,12 +101,12 @@ describe('dynapack', function() {
     });
 
     packer.once('error', done);
-    packer.once('finish', function() {
+    packer.once('end', function() {
       expect(bcount).to.be(5);
       done();
     });
 
-    packer.writeEntry(__dirname + '/diamond/a.js');
+    packer.write(__dirname + '/diamond/a.js');
     packer.write(__dirname + '/diamond/a.js');
     packer.end();
   });
@@ -88,8 +119,10 @@ describe('dynapack', function() {
 
   it('should handle updates', function(done) {
     var packer = dynapack();
+    var deps = packer.deps();
     var bcount = 0;
-    var updated = false;
+
+    deps.pipe(packer.mods());
 
     packer.on('readable', function() {
       var bundle;
@@ -98,26 +131,102 @@ describe('dynapack', function() {
         bcount++;
       }
 
-      if (updated) {
-        packer.end();
-      }
-      else {
-        packer.write(__dirname + '/diamond/d.js');
-        updated = true;
+      if (bcount === 3) {
+        deps.write({id: __dirname + '/diamond/d.js'});
       }
     });
 
     packer.once('error', done);
-    packer.once('finish', function() {
-      expect(bcount).to.be(6);
+    packer.once('end', function() {
+      expect(bcount).to.be(5);
       done();
     });
 
-    packer.writeEntry(__dirname + '/diamond/a.js');
+    packer.write(__dirname + '/diamond/a.js');
+    packer.end();
   });
 
+  it('should handle entry source', function(done) {
+    var pack = dynapack();
+    var bcount = 0;
 
-  it('should write graph.json', function(done) {
+    pack.on('readable', function() {
+      while (this.read()) {bcount++}
+    });
+
+    pack.on('error', done);
+
+    pack.on('end', function() {
+      expect(bcount).to.be(2);
+      done();
+    });
+
+    pack.end({id: __dirname + '/dne.js', source: 'module.exports=function(){};'});
+    pack.resume();
+  });
+
+  it('should not error on bad js', function(done) {
+    var pack = dynapack();
+    pack.on('error', done);
+    pack.on('end', done);
+    pack.end({id: __dirname + '/dne.js', source: 'module.exports=function(){;'});
+    pack.resume();
+  });
+
+  it('should allow dep transforms', function(done) {
+    var pack = dynapack();
+    var deps = pack.deps();
+    var mods = pack.mods();
+    var output = '';
+
+    var transform = through2.obj(function(dep, encoding, callback) {
+      dep.source = dep.source.replace('-=BAD=-', '-=GOOD=-');
+      this.push(dep);
+      callback();
+    });
+
+    deps.pipe(transform).pipe(mods);
+
+    pack.on('readable', function() {
+      var bundle;
+      while (bundle = this.read()) {
+        output += bundle.source;
+      }
+    });
+
+    pack.on('error', done);
+
+    pack.on('end', function() {
+      expect(output).to.match(/-=GOOD=-/);
+      done();
+    });
+
+    pack.end({
+      id: __dirname + '/dne.js',
+      source: '-=BAD=-'
+    });
+  });
+
+  it('should fail on nonexistent module', function(done) {
+    var pack = dynapack();
+    pack.on('error', function(err) {
+      done();
+    });
+    pack.on('end', function() {
+      done(new Error('did not error'));
+    });
+    pack.end({
+      id: __dirname + '/dne.js',
+      source: 'require("fake");'
+    });
+    pack.resume();
+  });
+
+  xit('should be simple to use with browserify transforms?', function(done) {
+    pack.deps().pipe(pick).pipe(insertGlobals).pipe(pick).pipe(pack.mods());
+  });
+
+  xit('should write graph.json', function(done) {
     var output = __dirname + '/diamond/bundles';
     var entry = __dirname + '/diamond/a.js';
 
@@ -152,40 +261,6 @@ describe('dynapack', function() {
     });
   });
 
-  it('should inject process global', function(done) {
-    var packer = dynapack({
-      entries: __dirname + '/usesProcess.js'
-    });
-
-    packer.run(function(err, chunks) { 
-      if (err) done(err);
-      else {
-        //console.log(JSON.stringify(chunks, null, 2));
-        expect(Object.keys(chunks[1]).length).to.be(2);
-        done();
-      }
-    });
-  });
-
-  it('should pass global transforms to module-deps', function(done) {
-    var packer = dynapack({
-      entries: __dirname + '/usesEnv.js',
-      globalTransforms: [
-        envify({HOST: 'website.org', PORT: '80'})
-      ]
-    });
-
-    packer.run(function(err, chunks) { 
-      if (err) done(err);
-      else {
-        //console.log(JSON.stringify(chunks, null, 2));
-        // Should exclude process shim b/c envify injects environment
-        // variables.
-        expect(Object.keys(chunks[1]).length).to.be(1);
-        done();
-      }
-    });
-  });
 
   var server;
 
@@ -193,16 +268,16 @@ describe('dynapack', function() {
     server && server.close();
   });
 
-  it.only('should pass browser tests', function(done) {
+  it('should pass browser tests', function(done) {
     this.timeout(0);
     iso({
       basedir: __dirname,
       tests: [
-        'diamond'
-        //'circular',
-        //'wrong-order',
-        //'simultaneous',
-        //'entries'
+        'diamond',
+        'circular',
+        'wrong-order',
+        'simultaneous',
+        'entries'
       ],
       manual: false
     }, done);

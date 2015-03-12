@@ -77,6 +77,36 @@ There is also a command-line interface; installing it globally
 - [API](#api)
 - [Command line](#command-line)
 
+## Streams
+
+Dynapack is composed of several streams that work in concert; they are
+
+- entries stream
+- loader stream
+- dependency stream
+- bundles stream
+
+File paths enter dynapack through the entries stream. They are immediately handed
+to the dependency stream, which then passes it to the loader stream. The loader
+stream loads the source, optionally modifies it, then sends it to the bundles stream
+(i.e. the dynapack instance). The bundles stream parses the source for dependencies,
+and sends each one it finds (just a file path) to the dependency stream.
+
+The default loader stream behavior is to load the source and immediately hand it to
+the bundles stream, unmodified. If the user would like to alter the source before it
+is parsed for dependencies, one should do
+
+```js
+var transformer = new TransformStream( /* ... customize ... */);
+var writer = new WritableStream( /* ... writes bundles to disk ... */ );
+var pack = dynapack();
+
+pack.deps().pipe(transformer).pipe(pack.mods()); // Intercept the flow.
+pack.pipe(writer);
+pack.end(__dirname + '/main.js');
+```
+
+
 ## Dependency syntax
 
 The current version of dynapack supports only Node.js-style syntax for static

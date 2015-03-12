@@ -111,7 +111,7 @@ require.ensure = function(modules, callback) {
         var script = document.createElement('script');
         script.type = 'text/javascript';
         script.charset = 'utf-8';
-        script.src = (options.prefix || '/') + bundleId + '.js';
+        script.src = (options.prefix || '/') + bundleId; // Bundle id includes .js
         head.appendChild(script);
       }
       // Can a require call occur while a bundle is in stasis? No, the

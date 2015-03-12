@@ -1,5 +1,6 @@
 var fs = require('fs');
 var Dynapack = require('../..');
+var BundleSaver = require('../bundle-saver');
 
 /**
  *  In this test, the entry bundle arrives at the client much later than
@@ -8,7 +9,7 @@ var Dynapack = require('../..');
 
 module.exports = function(app, done) {
   var iso = this;
-  var scripts = iso.iso;
+  var scripts;
 
   app.use(function(req, res) {
     var bundle = __dirname + '/bundles' + req.path;
@@ -32,19 +33,17 @@ module.exports = function(app, done) {
     }
   });
 
-  var packer = Dynapack({
-    entries: {main: __dirname + '/main.js'},
-    output: __dirname + '/bundles',
-    prefix: iso.route + '/'
-  });
+  var packer = Dynapack({prefix: iso.route + '/'});
 
-  packer.run(function() {
-    packer.write(function(err, entryInfo) {
-      scripts += entryInfo.main.map(function(script) {
-        return '<script async src="' + script + '"></script>';
-      }).join('');
-      done();
-    });
+  packer.on('readable', BundleSaver({dir: __dirname + '/bundles'}));
+  packer.once('end', done);
+  packer.once('error', done);
+  packer.end({name: 'main', id: __dirname + '/main.js'});
+
+  packer.on('bundled', function(graph) {
+    scripts = iso.iso + graph.entries.main.map(function(script) {
+      return '<script async src="' + packer.opts.prefix + script + '"></script>';
+    }).join('');
   });
 };
 

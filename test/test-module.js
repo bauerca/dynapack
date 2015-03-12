@@ -9,12 +9,11 @@ describe('Module', function() {
       var src = fs.createReadStream(id);
       var module = new Module({id: id, source: src});
 
-      module.loadSource();
-      module.on('error', done);
-
-      module.on('loaded', function(source) {
-        expect(typeof source).to.be('string');
-        done();
+      module.loadSource(function(err, source) {
+        if (!err) {
+          expect(typeof source).to.be('string');
+        }
+        done(err);
       });
     });
 
@@ -22,28 +21,12 @@ describe('Module', function() {
       var id = __dirname + '/diamond/a.js';
       var module = new Module({id: id});
 
-      module.loadSource();
-      module.on('error', done);
-
-      module.on('loaded', function(source) {
-        expect(typeof source).to.be('string');
-        done();
+      module.loadSource(function(err, source) {
+        if (!err) {
+          expect(typeof source).to.be('string');
+        }
+        done(err);
       });
     });
   });
-
-  describe('findDeps()', function() {
-    it('should find static and dynamic', function(done) {
-      var id = __dirname + '/diamond/a.js';
-      var module = new Module({id: id});
-
-      module.loadSource();
-      module.on('error', done);
-
-      module.on('loaded', function(source) {
-        expect(typeof source).to.be('string');
-        done();
-      });
-
-
 });

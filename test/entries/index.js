@@ -1,6 +1,7 @@
 var Dynapack = require('../..');
 var serveStatic = require('serve-static');
 var expect = require('expect.js');
+var BundleSaver = require('../bundle-saver');
 
 module.exports = function(app, done) {
   var scriptsA = this.iso;
@@ -27,31 +28,26 @@ module.exports = function(app, done) {
   app.use(serveStatic(__dirname + '/bundles'));
 
   var packer = Dynapack({
-    entries: {
-      a: __dirname + '/entryA.js',
-      b: __dirname + '/entryB.js'
-    },
-    output: __dirname + '/bundles',
     prefix: this.route + '/'
   });
 
-  packer.run(function() {
-    packer.write(function(err, entryInfo) {
-      scriptsA += entryInfo.a.map(function(script) {
-        return '<script async src="' + script + '"></script>';
-      }).join('');
-      scriptsB += entryInfo.b.map(function(script) {
-        return '<script async src="' + script + '"></script>';
-      }).join('');
+  packer.on('readable', BundleSaver({dir: __dirname + '/bundles'}));
+  packer.once('error', done);
+  packer.once('end', done);
 
-      try {
-        expect(entryInfo.a.length).to.be(3);
-        expect(entryInfo.b.length).to.be(3);
-        done();
-      }
-      catch (err) {
-        done(err);
-      }
-    });
+  packer.on('bundled', function(graph) {
+    scriptsA = iso.iso + graph.entries.a.map(function(script) {
+      return '<script async src="' + script + '"></script>';
+    }).join('');
+    scriptsB += iso.iso + graph.entries.b.map(function(script) {
+      return '<script async src="' + script + '"></script>';
+    }).join('');
+
+    expect(graph.entries.a.length).to.be(3);
+    expect(graph.entries.b.length).to.be(3);
   });
+
+  packer.write({name: 'a', id: __dirname + '/entryA.js'});
+  packer.write({name: 'b', id: __dirname + '/entryB.js'});
+  packer.end();
 };
