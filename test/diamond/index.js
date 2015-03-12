@@ -10,8 +10,8 @@ module.exports = function(app, done) {
   app.use(function(req, res) {
 
     // Try to serve javascript files with delay.
-    var jsFile = __dirname + '/bundles' + req.path;
-    if (req.path !== '/' && fs.existsSync(jsFile)) {
+    if (/\.js$/.test(req.path)) {
+      var jsFile = __dirname + '/bundles' + req.path.replace(iso.route, '');
       // Send js after some lag and finish test if 3
       // bundles have been sent (a, c, and d).
       setTimeout(function() {
@@ -42,14 +42,10 @@ module.exports = function(app, done) {
   pack.on('readable', BundleSaver({dir: output}));
 
   pack.once('end', function() {
-    scripts = pack.scripts('main');
+    scripts = pack.scripts('a');
     done();
   });
 
   pack.once('error', done);
-
-  pack.end({
-    name: 'main',
-    id: __dirname + '/a.js'
-  });
+  pack.end(__dirname + '/a.js');
 };

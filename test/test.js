@@ -10,7 +10,8 @@ var envify = require('envify/custom');
 var morgan = require('morgan');
 var iso = require('osh-iso-test');
 var through2 = require('through2');
-var InsertGlobals = require('insert-module-globals');
+var File = require('vinyl');
+var open = require('open');
 
 describe('dynapack', function() {
   it('should produce single bundle and entry', function(done) {
@@ -23,13 +24,11 @@ describe('dynapack', function() {
 
       while (bundle = this.read()) {
         bcount++;
-        if (!bundle.entry) mcount += bundle.modules.length;
       }
     });
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(mcount).to.be(1);
       expect(bcount).to.be(2); // 1 entry, and 1 bundle
       done();
     });
@@ -53,6 +52,26 @@ describe('dynapack', function() {
     packer.once('error', done);
     packer.once('end', function() {
       expect(bcount).to.be(5); // plus one entry.
+      done();
+    });
+
+    packer.end(__dirname + '/diamond/a.js');
+  });
+
+  it('should work in debug mode', function(done) {
+    var packer = dynapack({debug: true});
+    var bcount = 0;
+
+    packer.on('readable', function() {
+      var bundle;
+      while (bundle = this.read()) {
+        bcount++;
+      }
+    });
+
+    packer.once('error', done);
+    packer.once('end', function() {
+      expect(bcount).to.be(7);
       done();
     });
 
@@ -132,7 +151,7 @@ describe('dynapack', function() {
       }
 
       if (bcount === 3) {
-        deps.write({id: __dirname + '/diamond/d.js'});
+        deps.write(new File({path: __dirname + '/diamond/d.js'}));
       }
     });
 
@@ -161,7 +180,13 @@ describe('dynapack', function() {
       done();
     });
 
-    pack.end({id: __dirname + '/dne.js', source: 'module.exports=function(){};'});
+    pack.end(
+      new File({
+        path: __dirname + '/dne.js',
+        contents: new Buffer('module.exports=function(){};')
+      })
+    );
+
     pack.resume();
   });
 
@@ -169,7 +194,12 @@ describe('dynapack', function() {
     var pack = dynapack();
     pack.on('error', done);
     pack.on('end', done);
-    pack.end({id: __dirname + '/dne.js', source: 'module.exports=function(){;'});
+    pack.end(
+      new File({
+        path: __dirname + '/dne.js',
+        contents: new Buffer('module.exports=function(){;')
+      })
+    );
     pack.resume();
   });
 
@@ -180,7 +210,7 @@ describe('dynapack', function() {
     var output = '';
 
     var transform = through2.obj(function(dep, encoding, callback) {
-      dep.source = dep.source.replace('-=BAD=-', '-=GOOD=-');
+      dep.contents = new Buffer(dep.contents.toString('utf8').replace('-=BAD=-', '-=GOOD=-'));
       this.push(dep);
       callback();
     });
@@ -190,7 +220,7 @@ describe('dynapack', function() {
     pack.on('readable', function() {
       var bundle;
       while (bundle = this.read()) {
-        output += bundle.source;
+        output += bundle.contents.toString();
       }
     });
 
@@ -201,10 +231,10 @@ describe('dynapack', function() {
       done();
     });
 
-    pack.end({
-      id: __dirname + '/dne.js',
-      source: '-=BAD=-'
-    });
+    pack.end(new File({
+      path: __dirname + '/dne.js',
+      contents: new Buffer('-=BAD=-')
+    }));
   });
 
   it('should fail on nonexistent module', function(done) {
@@ -216,49 +246,14 @@ describe('dynapack', function() {
       done(new Error('did not error'));
     });
     pack.end({
-      id: __dirname + '/dne.js',
-      source: 'require("fake");'
+      path: __dirname + '/dne.js',
+      contents: new Buffer('require("fake");')
     });
     pack.resume();
   });
 
   xit('should be simple to use with browserify transforms?', function(done) {
     pack.deps().pipe(pick).pipe(insertGlobals).pipe(pick).pipe(pack.mods());
-  });
-
-  xit('should write graph.json', function(done) {
-    var output = __dirname + '/diamond/bundles';
-    var entry = __dirname + '/diamond/a.js';
-
-    var packer = dynapack({
-      entries: entry,
-      output: output,
-      bundle: true
-    });
-
-    packer.run(function(err, chunks) { 
-      if (err) done(err);
-      else {
-        //console.log(JSON.stringify(chunks, null, 2));
-        expect(Object.keys(chunks).length).to.be(4);
-        packer.write(function(err, entryInfo) {
-          if (err) done(err);
-          else {
-            var graph = JSON.parse(
-              fs.readFileSync(output + '/graph.json')
-            );
-            //console.log(JSON.stringify(graph, null, 2));
-            expect(graph.prefix).to.be.ok();
-            expect(Object.keys(graph.entries).length).to.be(1);
-            expect(graph.entries[entry].length).to.be(2);
-            // Test the diamond.
-            expect(Object.keys(graph.bundles).length).to.be(4);
-            expect(Object.keys(graph.bundles['1.js']).length).to.be(2);
-          }
-          done();
-        });
-      }
-    });
   });
 
 
@@ -272,6 +267,7 @@ describe('dynapack', function() {
     this.timeout(0);
     iso({
       basedir: __dirname,
+      debug: true,
       tests: [
         'diamond',
         'circular',

@@ -11,17 +11,18 @@ var notify = document.getElementById('notify');
 // should happen IN PARALLEL. This means it should take roughly 200ms
 // for the fetch callback to run.
 
-
-setTimeout(function() {
-  notify.innerHTML = 'fetching module c...';
+//setTimeout(function() {
+  notify.textContent = 'fetching module c...';
   var start = (new Date()).getTime();
   ensure([c], function(err) {
-    notify.innerHTML = (
+    console.log('got here???');
+    var msg = (
       'Expect ' + latency.toString() + 'ms load time. ' +
       'Time taken: ' +
       ((new Date()).getTime() - start).toString() +
       'ms'
     );
-    iso.report(notify.textContent);
+    notify.textContent = msg;
+    iso.ok(msg);
   });
-}, 20);
+//}, 20);

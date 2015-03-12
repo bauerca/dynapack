@@ -1,38 +1,22 @@
-var mdeps = require('module-deps');
 var builtins = require('browserify/lib/builtins');
-var browserResolve = require('browser-resolve');
-var through2 = require('through2');
 var fs = require('fs');
 var path = require('path');
-var mkdirp = require('mkdirp');
-var extend = require('xtend');
-var async = require('async');
-var _ = require('underscore');
 var forEach = require('lodash/collection/forEach');
 var sum = require('lodash/collection/sum');
 var union = require('lodash/array/union');
 var last = require('lodash/array/last');
 var pull = require('lodash/array/pull');
-var values = require('lodash/object/values');
-var clone = require('lodash/lang/cloneDeep');
-var mapValues = require('lodash/object/mapValues');
 var assign = require('lodash/object/assign');
 var encodeBits = require('./lib/encode-bits');
-var insertGlobals = require('insert-module-globals');
 var commondir = require('commondir');
 var Module = require('./lib/module');
-var DynamicRegExp = require('./lib/dynamic-regexp');
 var inherits = require('inherits');
 var Transform = require('readable-stream').Transform;
 var Writable = require('readable-stream').Writable;
 var Readable = require('readable-stream').Readable;
-//var Transform = require('./lib/transform');
-//var JSONStream = require('JSONStream');
-
-var processPath = require.resolve('process/browser.js');
+var File = require('vinyl');
 
 inherits(Dynapack, Transform);
-
 
 
 function Dynapack(opts) {
@@ -43,7 +27,7 @@ function Dynapack(opts) {
   Transform.call(this, {objectMode: true});
 
   /**
-   *  A mapping between module id and loaded and parsed modules. Once in this
+   *  A mapping between module path and loaded and parsed modules. Once in this
    *  object a module is ready to be bundled (but may be replaced before bundling
    *  if the same module is visited in another dependency tree.
    */
@@ -59,16 +43,19 @@ function Dynapack(opts) {
 
   /**
    *  An array of paths to entry modules. Entries are special because they can be
-   *  any module in the dependency graph. The entryNames are customized names
-   *  given by the user.
+   *  any module in the dependency graph. The entryNames are derived from the entry
+   *  path.
    */
 
-  this.entryIds = [];
+  this.entryPaths = [];
   this.entryNames = [];
 
-  this.opts = opts || {
-    builtins: builtins
-  };
+  this.opts = assign(
+    {
+      builtins: builtins
+    },
+    opts
+  );
 
   /**
    *  When a new entry is given to dynapack (or an old one is replaced), we need
@@ -94,44 +81,14 @@ function Dynapack(opts) {
   this._deps.pipe(this._mods);
 
   return this;
-
-  //self.transform = Transform({
-  //  moduleLabel: labels[0]
-  //});
-
-  self.modules = {};
-
-  // A mapping from bundle id to a subset of modules. The bundle id is formed
-  // from the set of entry points that touch the subset of modules. That is,
-  // the bundle module subset is the intersection of all static
-  // dependency trees identified by the group of entry points encoded into
-  // the bundle id.
-  self.bundles = {};
-
-  // This will include the given entry points. Roots are entry points and
-  // dynamic modules. They define static dependency trees, the union of which
-  // cover all modules.
-  self.roots = [];
-
-  // Every module that is a dynamic dependency is given a unique integer
-  // index. This is so we can id our bundles.
-  self.dynamicModuleCount = 0;
-  self.moduleCount = 0;
 }
-
-
-Dynapack.prototype.bundleId = function(module) {
-  //console.log('bundle id for', module);
-  return encodeBits(module.roots, 32);
-};
-
 
 
 Dynapack.prototype.traverse = function(iterator) {
   var visited = [];
   var modules = this.modules;
 
-  forEach(this.entryIds, visitModule);
+  forEach(this.entryPaths, visitModule);
 
   function visitModule(id) {
     var module = modules[id];
@@ -144,11 +101,11 @@ Dynapack.prototype.traverse = function(iterator) {
       iterator(visited);
     }
 
-    module.deps.set.forEach(function(depId) {
-      var dep = modules[depId];
+    module.deps.set.forEach(function(depPath) {
+      var dep = modules[depPath];
 
       if (!dep || visited.indexOf(dep) < 0) {
-        visitModule(depId);
+        visitModule(depPath);
       }
     });
 
@@ -166,9 +123,9 @@ Dynapack.prototype.renderBundle = function(bundle) {
   var bundleRoots = pack.getBundleRoots(bundle.id);
 
   // Re-id bundleRoots
-  for (var rootId in bundleRoots) {
-    bundleRoots[pack.ids[rootId]] = bundleRoots[rootId];
-    delete bundleRoots[rootId];
+  for (var rootPath in bundleRoots) {
+    bundleRoots[pack.ids[rootPath]] = bundleRoots[rootPath];
+    delete bundleRoots[rootPath];
   }
 
   if (!pack.bundleHeader) {
@@ -177,10 +134,10 @@ Dynapack.prototype.renderBundle = function(bundle) {
 
   return (
     pack.bundleHeader + '("' + bundle.id + '", [{' +
-    bundle.modules.map(function(moduleId) {
+    bundle.modules.map(function(path) {
       return (
-        '"' + pack.ids[moduleId] + '":' +
-        pack.renderModule(moduleId)
+        '"' + pack.ids[path] + '":' +
+        pack.renderModule(path)
       );
     }).join(',') + '},' +
     JSON.stringify(bundleRoots) +
@@ -189,17 +146,17 @@ Dynapack.prototype.renderBundle = function(bundle) {
 };
 
 /**
- *  @param {String} id Module id; it better be from dynapack.entries sucka.
+ *  @param {String} modPath Module id; it better be from dynapack.entries sucka.
  */
 
-Dynapack.prototype.renderEntry = function(id, bundles) {
+Dynapack.prototype.renderEntry = function(entryPath, bundles) {
   if (!this._entryHeader) {
     this._entryHeader = fs.readFileSync(__dirname + '/browser/entry.js');
   }
 
   return (
     this._entryHeader +
-    '("' + this.ids[id] + '",' +
+    '("' + this.ids[entryPath] + '",' +
     JSON.stringify(bundles) + ',' +
     JSON.stringify({
       prefix: this.opts.prefix || '/'
@@ -211,8 +168,8 @@ Dynapack.prototype.renderEntry = function(id, bundles) {
 
 Dynapack.prototype.scripts = function(entryName) {
   var index = this.entryNames.indexOf(entryName);
-  var id = this.entryIds[index];
-  var entryBundles = this.requiredBundles(id);
+  var entryPath = this.entryPaths[index];
+  var entryBundles = this.requiredBundles(entryPath);
   var prefix = this.opts.prefix || '/';
   var scripts = '<script async src="' + prefix + entryName + '.entry.js"></script>';
 
@@ -238,7 +195,7 @@ Dynapack.prototype.bundle = function(opts) {
     entries: {}  // maps entry ids to bundle id arrays.
   };
 
-  var baseId = commondir(
+  var basePath = commondir(
     Object.keys(pack.modules)
   );
 
@@ -262,10 +219,10 @@ Dynapack.prototype.bundle = function(opts) {
     }
 
     root = root || visited[0];
-    module.roots = union([root.id], module.roots);
+    module.roots = union([root.path], module.roots);
 
-    if (root.id === module.id) {
-      roots[module.id] = 1;
+    if (root.path === module.path) {
+      roots[module.path] = 1;
     }
   });
 
@@ -281,23 +238,23 @@ Dynapack.prototype.bundle = function(opts) {
     var bundle;
     var bundleId;
 
-    ids[module.id] = (
+    ids[module.path] = (
       pack.opts.debug ?
-        module.id.slice(baseId.length + 1) : // remove leading slash.
+        module.path.slice(basePath.length + 1) : // remove leading slash.
         module.index.toString()
     );
 
-    graph.modules[ids[module.id]] = module.id;
+    graph.modules[ids[module.path]] = module.path;
 
     // Push module into a bundle based on its roots.
 
     bundleId = (
       pack.opts.debug ?
-      ids[module.id] :
+      ids[module.path] :
       (
         encodeBits(
-          module.roots.map(function(rootId) {
-            return roots.indexOf(rootId);
+          module.roots.map(function(rootPath) {
+            return roots.indexOf(rootPath);
           }),
           32
         ) +
@@ -306,7 +263,7 @@ Dynapack.prototype.bundle = function(opts) {
     );
 
     bundle = bundles[bundleId] || {id: bundleId, modules: []};
-    bundle.modules.push(module.id);
+    bundle.modules.push(module.path);
 
     if (!module.bundled) {
       bundle.render = true;
@@ -324,11 +281,16 @@ Dynapack.prototype.bundle = function(opts) {
     graph.bundles[bundle.id] = bundle.modules.concat();
 
     if (bundle.render) {
-      pack.push({
-        id: bundle.id,
-        modules: bundle.modules,
-        source: pack.renderBundle(bundle)
-      });
+      pack.push(
+        new File({
+          path: path.join(process.cwd(), bundle.id),
+          base: process.cwd(),
+          modules: bundle.modules,
+          contents: new Buffer(
+            pack.renderBundle(bundle)
+          )
+        })
+      );
     }
   });
 
@@ -337,9 +299,9 @@ Dynapack.prototype.bundle = function(opts) {
    *  rerendered or rendered for the first time.
    */
 
-  pack.entryIds.forEach(function(id, index) {
+  pack.entryPaths.forEach(function(entryPath, index) {
     var name = pack.entryNames[index];
-    var entryBundles = pack.requiredBundles(id);
+    var entryBundles = pack.requiredBundles(entryPath);
     var filename = name + '.entry.js';
     var render;
 
@@ -352,13 +314,15 @@ Dynapack.prototype.bundle = function(opts) {
     });
 
     if (render) {
-      pack.push({
-        entry: name,
-        id: filename,
-        module: id,
-        bundles: entryBundles,
-        source: pack.renderEntry(id, entryBundles)
-      });
+      pack.push(
+        new File({
+          path: path.join(process.cwd(), filename),
+          base: process.cwd(),
+          contents: new Buffer(
+            pack.renderEntry(entryPath, entryBundles)
+          )
+        })
+      );
     }
   });
 
@@ -370,8 +334,8 @@ Dynapack.prototype.bundle = function(opts) {
  *  done with it until the next modification.
  */
 
-Dynapack.prototype._finalize = function(id) {
-  this._loading[id]--;
+Dynapack.prototype._finalize = function(path) {
+  this._loading[path]--;
 
   if (sum(this._loading) === 0) {
     this.bundle();
@@ -383,9 +347,9 @@ Dynapack.prototype._finalize = function(id) {
  *  Inherit configuration options from pack.
  */
 
-Dynapack.prototype.createModule = function(opts) {
+Dynapack.prototype.createModule = function(file) {
   return new Module(
-    assign({}, this.opts, opts)
+    assign({file: file}, this.opts)
   );
 };
 
@@ -403,40 +367,39 @@ Dynapack.prototype._initMods = function() {
   var mods = pack._mods = new Writable({objectMode: true});
 
   mods._write = function(module, encoding, callback) {
+    var old;
     //console.log('received module', module);
 
-    if (typeof module !== 'object') {
+    if (typeof module.isNull !== 'function') {
       return pack.emit(
         'error',
         new Error(
-          'Mods stream accepts only module objects. A module object has ' +
-            'the attributes: "id" and "source", which should have been ' +
-            'provided on the dependency object emitted from the deps stream'
+          'Mods stream accepts only vinyl File objects.'
         )
       );
     }
 
     module = pack.createModule(module);
-
-    var old = pack.modules[module.id];
-
-    pack.modules[module.id] = module;
+    old = pack.modules[module.path];
+    pack.modules[module.path] = module;
 
     module.parse(function(err) {
       if (!err) {
         var newDeps = old ? module.subtractDeps(old) : module.deps;
         var removedDeps = old && old.subtractDeps(module);
 
-        newDeps.set.forEach(function(depId) {
-          pack._deps.write({id: depId});
+        newDeps.set.forEach(function(depPath) {
+          pack._deps.write(
+            new File({path: depPath})
+          );
         });
 
         if (removedDeps && removedDeps.set.length > 0) {
           pack.clean();
         }
 
-        //console.log('finalize from mods on', module.id);
-        pack._finalize(module.id);
+        //console.log('finalize from mods on', module.path);
+        pack._finalize(module.path);
       }
 
       callback(err);
@@ -462,15 +425,9 @@ Dynapack.prototype.deps = function() {
 };
 
 /**
- *  @typedef {Object} Dep
- *  @property {String} id
- *  @property {String} source
- */
-
-/**
  *  Create the transform stream that loads dependencies and sends them
  *  to the dynapack mods stream (default) or to a custom transform stream.
- *  The deps stream takes in a {@link Dep} object
+ *  The deps stream takes in a vinyl File.
  *
  */
 
@@ -479,62 +436,59 @@ Dynapack.prototype._initDeps = function() {
   var deps = pack._deps = new Transform({objectMode: true});
 
   deps.write = function(dep, encoding, callback) {
-    var id = dep.id;
+    var path = dep.path;
     //console.log('dep', dep);
 
-    if (id in pack._loading) {
-      pack._loading[id]++;
+    if (path in pack._loading) {
+      pack._loading[path]++;
     }
     else {
-      pack._loading[id] = 1;
+      pack._loading[path] = 1;
     }
 
     Transform.prototype.write.call(this, dep, encoding, callback);
   };
 
   deps._transform = function(dep, encoding, callback) {
-    var id = dep.id;
+    var path = dep.path;
 
-    if (dep.source) {
+    if (!dep.isNull()) {
       // Always replace previous version since source is provided.
-      return push(dep.source);
+      return push();
     }
 
-    fs.stat(id, function(err, stats) {
+    fs.stat(path, function(err, stats) {
       if (err) callback(err);
       else {
-        var cachedMtime = pack._mtimes[id] || 0;
-        var mtime = pack._mtimes[id] = stats.mtime.getTime();
+        var cachedMtime = pack._mtimes[path] || 0;
+        var mtime = pack._mtimes[path] = stats.mtime.getTime();
 
         if (mtime > cachedMtime) {
           load();
         }
         else {
-          pack._finalize(id);
+          pack._finalize(path);
           callback(); // Use the cache, don't push anything to mods.
         }
       }
     });
 
     function load() {
-      fs.readFile(id, {encoding: 'utf8'}, function(err, source) {
+      fs.readFile(path, function(err, source) {
         if (err) {
-          pack._loading[id]--;
+          pack._loading[path]--;
           callback(err);
         }
         else {
           //console.log('loaded', id);
-          push(source);
+          dep.contents = source;
+          push();
         }
       });
     }
 
-    function push(source) {
-      deps.push({
-        id: id,
-        source: source
-      });
-
+    function push() {
+      deps.push(dep);
       callback();
     }
   };
@@ -548,34 +502,31 @@ Dynapack.prototype._initDeps = function() {
 
 
 /**
- *  @typedef {Object} File
- *  @property {String} id The full path to the file.
- *  @property {String|ReadableStream} source The file source.
- */
-
-/**
  *  Send in entry modules to dynapack. The dependency graph will be
  *  discovered, and each new dependency (and its source) will be emitted
  *  on the deps stream.
+ *
+ *  @param {String|Object|File} entry This should be a path string, or vinyl config
+ *  object or instance.
  *
  */
 
 Dynapack.prototype._transform = function(entry, encoding, callback) {
   //console.log('received entry', entry);
   if (typeof entry === 'string') {
-    entry = {id: entry};
+    entry = {path: entry};
   }
 
-  if (this.entryIds.indexOf(entry.id) < 0) {
-    this.entryNames.push(entry.name || path.basename(entry.id).replace(/\.js$/, ''));
-    this.entryIds.push(entry.id);
+  if (this.entryPaths.indexOf(entry.path) < 0) {
+    this.entryNames.push(path.basename(entry.path).replace(/\.js$/, ''));
+    this.entryPaths.push(entry.path);
   }
 
-  this._deps.write({
-    id: entry.id,
-    source: entry.source
-  });
+  if (typeof entry.isNull !== 'function') {
+    entry = new File(entry);
+  }
 
+  this._deps.write(entry);
   callback();
 };
 
@@ -594,14 +545,6 @@ Dynapack.prototype._flush = function(callback) {
   }
 };
 
-Dynapack.prototype.watch = function(id) {
-  var pack = this;
-
-  fs.watch(id, function(event, filename) {
-
-  });
-};
-
 
 Dynapack.prototype.clean = function() {
   var modules = this.modules;
@@ -610,7 +553,7 @@ Dynapack.prototype.clean = function() {
   pack.traverse(function(visited) {
     var module = last(visited);
 
-    pull(clean, module.id);
+    pull(clean, module.path);
   });
 
   clean.forEach(function(id) {
@@ -637,76 +580,6 @@ function replaceAllString(src, remove, insert) {
   return src;
 }
 
-/**
- *  Change all ids from full path names to integer strings. This also changes
- *  the module string in the source code of each module. Serious obfuscation here;
- *  errors after this point make debugging difficult.
- */
-Dynapack.prototype.reId = function() {
-  var self = this;
-  var base = commondir(Object.keys(self.modules));
-  //console.log('base directory for ids', base);
-
-  // First change dependencies.
-  _.each(self.modules, function(module, id) {
-    var oldDeps = module.deps;
-    module.deps = [];
-    _.each(oldDeps, function(depId, name) {
-      var newId = reIdModule(depId);
-      // Replace in module source.
-      module.source = replaceAllString(module.source, name, newId);
-      module.deps.push(newId);
-    });
-    var oldDynamic = module.dynamic;
-    module.dynamic = [];
-    _.each(oldDynamic, function(depId, name) {
-      var newId = reIdModule(depId);
-      // Replace in module source.
-      module.source = replaceAllString(module.source, name, newId);
-      module.dynamic.push(newId);
-    });
-  });
-
-  // Then change entries.
-  self.entries = self.entries.map(reIdModule);
-  self.roots = self.roots.map(reIdModule);
-
-  // Then change modules themselves.
-  var oldModules = self.modules;
-  self.modules = {};
-  _.each(oldModules, function(module, oldId) {
-    var newId = (
-      self.opts.bundle ?
-        module.index.toString() :
-        oldId.slice(base.length)
-    );
-    module.path = oldId;
-    module.id = newId;
-    self.modules[newId] = module;
-  });
-
-  // Now bundles.
-  var oldBundles = self.bundles;
-  self.bundles = {};
-  _.each(oldBundles, function(modules, bundleId) {
-    var newModules = {};
-    _.each(modules, function(module, oldId) {
-      newModules[module.id] = module;
-    });
-    self.bundles[bundleId] = newModules;
-  });
-
-  // Now dance.
-
-
-  function reIdModule(id) {
-    return (
-      self.opts.bundle ?
-        self.modules[id].index.toString() :
-        id.slice(base.length)
-    );
-  }
-};
 
 /**
  *  When a module is required asynchronously, all of the bundles on
@@ -717,12 +590,12 @@ Dynapack.prototype.reId = function() {
  *  oh well.
  */
 
-Dynapack.prototype.requiredBundles = function(rootModuleId) {
+Dynapack.prototype.requiredBundles = function(rootPath) {
   var pack = this;
   var required = [];
 
-  if (pack.roots.indexOf(rootModuleId) < 0) {
-    throw new Error(rootModuleId, 'is not in the roots list.');
+  if (pack.roots.indexOf(rootPath) < 0) {
+    throw new Error(rootPath, 'is not in the roots list.');
   }
 
   forEach(pack.bundles, function(bundle) {
@@ -730,7 +603,7 @@ Dynapack.prototype.requiredBundles = function(rootModuleId) {
     // same 'roots' property. That's what defines a bundle. :|
     var module = pack.modules[bundle.modules[0]];
 
-    if (module.roots.indexOf(rootModuleId) >= 0) {
+    if (module.roots.indexOf(rootPath) >= 0) {
       required.push(bundle.id);
     }
   });
@@ -739,16 +612,16 @@ Dynapack.prototype.requiredBundles = function(rootModuleId) {
 };
 
 
-Dynapack.prototype.renderModule = function(id) {
+Dynapack.prototype.renderModule = function(path) {
   var pack = this;
-  var module = pack.modules[id];
+  var module = pack.modules[path];
   var source = module.source;
 
-  module.deps.set.forEach(function(depId) {
+  module.deps.set.forEach(function(depPath) {
     source = replaceAllString(
       source,
-      module.refs[depId],
-      pack.ids[depId]
+      module.refs[depPath],
+      pack.ids[depPath]
     );
   });
 
@@ -766,8 +639,7 @@ Dynapack.prototype.renderModule = function(id) {
  *  asynchronously required.  'roots' is a mapping from root module id to an
  *  array of bundles.
  *
- *  @param {String} bundleId The array of module ids.
- *  @param {Array<String>} bundle The array of module ids.
+ *  @param {String} bundleId
  */
 
 Dynapack.prototype.getBundleRoots = function(bundleId) {
@@ -775,181 +647,16 @@ Dynapack.prototype.getBundleRoots = function(bundleId) {
   var roots = {};
   var bundle = pack.bundles[bundleId];
 
-  bundle.modules.forEach(function(id) {
-      var module = pack.modules[id];
+  bundle.modules.forEach(function(path) {
+    var module = pack.modules[path];
 
-      module.deps.dynamic.forEach(function(depId) {
-        roots[depId] = pack.requiredBundles(depId);
-        });
-      });
+    module.deps.dynamic.forEach(function(depPath) {
+      roots[depPath] = pack.requiredBundles(depPath);
+    });
+  });
 
   return roots;
 };
 
-
-
-Dynapack.prototype.createGraph = function() {
-  var self = this;
-  var prefix = self.opts.prefix;
-
-  var graph = {
-prefix: prefix,
-        entries: {},
-        bundles: {},
-        modules: {}
-  };
-
-  _.each(self.modules, function(module, id) {
-      graph.modules[id] = {
-roots: module.roots.map(function(rootIndex) {
-         return self.roots[rootIndex];
-         }),
-deps: {
-dynamic: clone(module.dynamic),
-static: clone(module.deps)
-}
-};
-});
-_.each(self.bundles, function(modules, bundleId) {
-    // Form union of all other bundles brought in by given bundle.
-    //console.log(JSON.stringify(self.getBundleRoots(bundleId, modules), null, 2));
-    graph.bundles[bundleId + '.js'] = mapValues(
-      self.getBundleRoots(bundleId, modules),
-      function(rootBundles) {
-      return rootBundles.map(
-        function(bundleId) {return bundleId + '.js'}
-        );
-      }
-      );
-    });
-
-self.entries.forEach(function(entry, index) {
-    var entryId = self.entryIds[index];
-    var entryBundles = self.requiredBundles(entry);
-    var entryBasename = 'entry.' + index + '.js';
-
-    graph.entries[entryId] = [entryBasename].concat(
-      entryBundles.map(function(bundleId) {return bundleId + '.js'})
-      );
-    });
-
-return graph;
-};
-
-/**
- *  Write bundles to files.
- */
-Dynapack.prototype.writeBundles = function(done) {
-  var self = this;
-  var prefix = self.opts.prefix;
-  // Mapping from original entry path string to array of
-  // output-dir-relative js files that should be included in the entry
-  // point's page.
-  var entryInfo = {};
-  var output = self.opts.output;
-  var files = {};
-
-  // Before reId'ing and screwing all the full paths up, save
-  // module and bundle graph info.
-  var graph = self.createGraph();
-
-  //console.log('graph.modules', JSON.stringify(graph.modules, null, 2));
-
-  self.reId();
-
-  try {
-    fs.mkdirSync(output);
-  } catch (e) {
-    if (!/EEXIST/.test(e.message)) {
-      throw e;
-    }
-  }
-
-  var entryHeader = fs.readFileSync(__dirname + '/lib/entry.js');
-
-  if (!self.opts.bundle) {
-    // Undo our bundling work.
-    self.bundles = {};
-    _.each(self.modules, function(module, id) {
-      var bundleId = id.replace(/\.js$/, '').replace(/^\//, '');
-        var bundle = self.bundles[bundleId] = {};
-      bundle[id] = module;
-    });
-  }
-
-  //var entriesBundles = [];
-  //var entriesBundles = self.entries.map(function(entry) {
-  self.entries.forEach(function(entry, index) {
-    var entryBundles = self.requiredBundles(entry);
-    //entriesBundles.push(entryBundles);
-    //if (!self.opts.bundle) {
-    //  var entryModuleIds = [];
-    //  entryBundles.forEach(function(bundleId) {
-    //    for (var moduleId in self.bundles[bundleId]) {
-    //      entryModuleIds.push(moduleId.replace(/^\//, ''));
-    //    }
-    //  });
-    //  entryBundles = entryModuleIds;
-    //}
-
-    var entryId = self.entryIds[index];
-    var entryFiles = entryInfo[entryId] = [];
-    var entryBasename = 'entry.' + index + '.js';
-
-    entryFiles.push(prefix + entryBasename);
-
-    entryBundles.forEach(function(bundleId) {
-      entryFiles.push(prefix + bundleId + '.js');
-    });
-
-    var name = path.join(output, entryBasename);
-    files[name] = (
-      entryHeader +
-        '("' + entry + '",' +
-        JSON.stringify(entryBundles) + ',' +
-        JSON.stringify({
-        prefix: prefix
-      }) +
-        ');'
-    );
-  });
-
-  _.each(self.bundles, function(modules, bundleId) {
-    // Form union of all other bundles brought in by given bundle.
-    //console.log(JSON.stringify(self.getBundleRoots(bundleId, modules), null, 2));
-    var bundle = self.renderBundle(bundleId, modules);
-    var name = path.join(output, bundleId + '.js');
-    files[name] = bundle;
-
-    //for (var i = 0; i < entriesBundles.length; i++) {
-    //  if (entriesBundles[i].indexOf(bundleId) > -1) {
-    //    entriesBundles[i] += bundle;
-    //  }
-    //}
-  });
-
-  // Write the graph.
-  fs.writeFileSync(
-    path.join(output, 'graph.json'),
-    JSON.stringify(graph)
-  );
-
-  async.each(
-    Object.keys(files),
-    function(file, written) {
-      try {
-        mkdirp.sync(path.dirname(file));
-        fs.writeFile(file, files[file], written);
-      }
-      catch (err) {
-        written(err);
-      }
-    },
-    function(err) {
-      if (done) done(err, entryInfo);
-      else if (err) throw err;
-    }
-  );
-};
 
 module.exports = Dynapack;

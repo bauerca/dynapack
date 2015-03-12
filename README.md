@@ -77,35 +77,6 @@ There is also a command-line interface; installing it globally
 - [API](#api)
 - [Command line](#command-line)
 
-## Streams
-
-Dynapack is composed of several streams that work in concert; they are
-
-- entries stream
-- loader stream
-- dependency stream
-- bundles stream
-
-File paths enter dynapack through the entries stream. They are immediately handed
-to the dependency stream, which then passes it to the loader stream. The loader
-stream loads the source, optionally modifies it, then sends it to the bundles stream
-(i.e. the dynapack instance). The bundles stream parses the source for dependencies,
-and sends each one it finds (just a file path) to the dependency stream.
-
-The default loader stream behavior is to load the source and immediately hand it to
-the bundles stream, unmodified. If the user would like to alter the source before it
-is parsed for dependencies, one should do
-
-```js
-var transformer = new TransformStream( /* ... customize ... */);
-var writer = new WritableStream( /* ... writes bundles to disk ... */ );
-var pack = dynapack();
-
-pack.deps().pipe(transformer).pipe(pack.mods()); // Intercept the flow.
-pack.pipe(writer);
-pack.end(__dirname + '/main.js');
-```
-
 
 ## Dependency syntax
 
@@ -184,77 +155,67 @@ ensure([__superagent], function(err) {
 
 ## API
 
-Configuration options and defaults are:
+The dynapack API is now stream-based (*and* [vinyl](https://github.com/wearefractal/vinyl)-based)
+to encourage interoperability with the
+[gulp-ness](http://gulpjs.com/).
+It is composed of several streams that work in concert, where each stream accepts and
+emits vinyl File instances; they are
+
+- the dynapack (or entries/bundles) transform stream,
+- the dependency readable stream (deps), and
+- the modules writable stream (mods).
+
+File paths (and possibly their pre-loaded sources) for entry modules are
+pushed into dynapack by the user (e.g. for single-page apps, this would be main.js
+or something).
+
+If the source is not provided, the entry module is loaded from disk and
+emitted by the deps stream. By default the deps stream is piped directly into
+the mods stream; however, users may inject their own transform streams between
+deps and mods by using the [deps()](#deps) and [mods()](#mods) calls.
+
+When the mods stream stops being backlogged by new modules, dynapack runs the
+bundle-splitting algorithm and emits bundles (on the dynapack stream)
+along with the special
+`bundled` event, which outputs the bundle sets and entry dependency metadata.
+
+So, the easiest way to use it ignores the deps/mods business,
 
 ```js
-var packer = new Dynapack({
-  entries: undefined, // required!
-  output: './bundles',
-  prefix: '/',
-  bundle: true,
-  dynamicLabels: 'js',
-  builtins: require('browserify/lib/builtins'),
-  globalTransforms: []
-});
+var gulp = require('gulp');
+var dynapack = require('dynapack');
+
+var pack = dynapack();
+
+pack.pipe(gulp.dest(__dirname + '/bundles'));
+pack.end(__dirname + '/main.js');
 ```
 
-Use the instance like this:
+If you need to change a module before dynapack parses it for new dependencies
+(for example, injecting globals, clipping code with process.env, etc), simply
+insert a transform stream (that handles vinyl files) in between deps and mods:
 
 ```js
-packer.run(function(err, bundles) {
-  // Inspect the bundle contents.
-  console.log(bundles);
-  
-  packer.write(function(err, entries) {
-    // Use the entry-point/bundles maps to serve web-pages and
-    // bundles.
-    console.log(entries);
-  });
-});
+var transformer = new TransformStream( /* ... customize ... */);
+var pack = dynapack();
+
+pack.deps().pipe(transformer).pipe(pack.mods()); // Intercept the flow.
+pack.pipe(gulp.dest(__dirname + '/bundles'));
+pack.end(__dirname + '/main.js');
 ```
 
 ### Configuration
 
-Passed to the Dynapack constructor.
-
-#### entries {String|Array&lt;String&gt;|Object&lt;String, String&gt;}
-
-This option is the only required option and must identify the (client-side)
-entry point(s) of the app to bundle. The different allowed formats will
-affect only the ouput of the [write()](#writecallback) method.
-
-A string is given when there is only one
-app entry point (e.g. "single-page" apps); an array is given when there are
-many. Alternatively, a mapping between custom ids and entry point paths will
-replace the auto-generated ids used by default by 
-[write()](#writecallback).
-
-For example, when entries is `'./client.js'`, the write method would return
-something like:
+Configuration options and defaults are:
 
 ```js
-{
-  "./client.js": [
-    "./bundles/entry.0.js",
-    "./bundles/a.js"
-  ]
-}
+var packer = new Dynapack({
+  prefix: '/',
+  debug: false,
+  dynamicLabels: 'js',
+  builtins: require('browserify/lib/builtins')
+});
 ```
-
-whereas an entries like `{app: './client.js'}` would produce:
-
-```js
-{
-  "app": [
-    "./bundles/entry.0.js",
-    "./bundles/a.js"
-  ]
-}
-```
-
-#### output {String}
-
-The default value is `"./bundles"`. This is where bundle files are saved.
 
 #### prefix {String}
 
@@ -273,7 +234,7 @@ each module as a "bundle" but otherwise act the same (as far as async loading
 in the browser is concerned). Browser loading of js will be much slower,
 however, since the number of "bundles" will skyrocket. Worth it.
 
-#### dynamicLabels {String|Array&lt;String&gt;}
+#### dynamic {String|Array&lt;String&gt;}
 
 Defaults to `'js'`. This option permits changing the syntax of the comment
 part of a d<sup>3</sup>.
@@ -283,27 +244,26 @@ part of a d<sup>3</sup>.
 Defaults to `require('browserify/lib/builtins')`. See
 [Browserify](http://browserify.org/) docs.
 
-#### globalTransforms
 
-Defaults to empty array. See
-[Browserify](http://browserify.org/) docs.
 
 ### Methods
 
-Available on a Dynapack instance.
+Available on the dynapack stream.
 
-#### run(callback)
+#### write(file)
 
-The callback will receive either an error as first argument or the
-(fairly low-level) results of the bundling process as second.
+Push an entry file into the pack. This should be an absolute path string or
+a [vinyl File](https://github.com/wearefractal/vinyl).
 
-#### write(callback)
+#### deps()
 
-This should be called after a successful run().
-The callback will receive either an error as first argument or information
-regarding the bundles that should be embedded in the webpages (HTML) that
-deliver each app entry point.
+Get the dependency stream and disconnect (unpipe) it from the modules stream.
+After calling this method, you must establish a connection to the modules
+stream again, either directly or via custom transform streams.
 
+#### mods()
+
+Get the modules stream. You will need this if you call [deps()](#deps).
 
 
 ## Command line
@@ -312,16 +272,16 @@ All options are optional.
 
 ```
 > dynapack \
+    <entry-point> <entry-point> ... \
     (-o|--output) <output-directory> \
     (-p|--prefix) <string> \
-    (-d|--debug) \
-    <entry-point> <entry-point> ...
+    (-d|--debug)
 ```
 
 For example
 
 ```bash
-dynapack -d -o ./test-bundles -p /scripts/ app.js
+dynapack app.js -d -o ./test-bundles -p /scripts/
 ```
 
 where `app.js` is the sole entry point to the client-side version of your app.

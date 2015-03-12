@@ -15,11 +15,11 @@ function BundleSaver(opts) {
     var file;
 
     while (bundle = this.read()) {
-      file = opts.dir + '/' + bundle.id;
+      file = opts.dir + '/' + bundle.relative;
       mkdirp.sync(
         path.dirname(file)
       );
-      fs.writeFileSync(file, bundle.source);
+      fs.writeFileSync(file, bundle.contents);
     }
   };
 }

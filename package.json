@@ -17,19 +17,15 @@
     "commondir": "0.0.1",
     "concat-stream": "^1.4.7",
     "detective": "^4.0.0",
-    "esprima": "~1.2.2",
     "inherits": "^2.0.1",
-    "insert-module-globals": "^6.0.0",
     "lodash": "^3.4.0",
     "minimist": "^0.1.0",
     "mkdirp": "^0.5.0",
-    "module-deps": "~2.1.0",
-    "process": "^0.7.0",
     "readable-stream": "^1.0.33",
-    "resolve": "~0.7.0",
+    "stream-array": "^1.0.1",
     "through2": "~0.4.2",
-    "underscore": "~1.6.0",
-    "xtend": "~3.0.0"
+    "vinyl": "^0.4.6",
+    "vinyl-fs": "^1.0.0"
   },
   "devDependencies": {
     "connect": "~3.0.0",
@@ -38,7 +34,8 @@
     "express": "^4.4.2",
     "morgan": "^1.2.3",
     "node-ensure": "0.0.0",
-    "osh-iso-test": "latest",
+    "open": "0.0.5",
+    "osh-iso-test": "^0.1.0",
     "parseurl": "~1.0.1",
     "serve-static": "^1.7.0"
   },

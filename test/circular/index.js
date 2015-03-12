@@ -16,12 +16,12 @@ module.exports = function(app, done) {
 
   app.use(serveStatic(__dirname + '/bundles'));
 
-  var packer = Dynapack({prefix: this.route + '/'});
+  var packer = Dynapack({prefix: '/'});
 
   packer.on('readable', BundleSaver({dir: __dirname + '/bundles'}));
   packer.once('end', done);
   packer.once('error', done);
-  packer.end({name: 'main', id: __dirname + '/main.js'});
+  packer.end(__dirname + '/main.js');
 
   packer.on('bundled', function(graph) {
     scripts = iso.iso + graph.entries.main.map(function(script) {
