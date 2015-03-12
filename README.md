@@ -212,7 +212,7 @@ Configuration options and defaults are:
 var packer = new Dynapack({
   prefix: '/',
   debug: false,
-  dynamicLabels: 'js',
+  dynamic: 'js',
   builtins: require('browserify/lib/builtins')
 });
 ```
@@ -225,11 +225,11 @@ which case, include the hostname in the prefix.
 
 Should end with a slash. The default is '/'.
 
-#### bundle {Boolean}
+#### debug {Boolean}
 
-Defaults to `true`.
+Defaults to `false`.
 
-Set to `false` when developing and debugging. If false, Dynapack will treat
+Set to `true` when developing. If true, Dynapack will treat
 each module as a "bundle" but otherwise act the same (as far as async loading
 in the browser is concerned). Browser loading of js will be much slower,
 however, since the number of "bundles" will skyrocket. Worth it.
