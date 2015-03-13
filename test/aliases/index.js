@@ -25,7 +25,7 @@ module.exports = function(app, done) {
     // Otherwise send testing page.
     res.send(
       '<!DOCTYPE html><html><head></head><body>' +
-      '<h2 id="notify">Downloading main.js...</h2>' +
+      '<h2 id="notify">Failed if you are still reading this.</h2>' +
       iso.iso +
       scripts +
       '</body></html>'
@@ -44,14 +44,18 @@ module.exports = function(app, done) {
   ss.on('data', function(file) {
     scripts = file.contents.toString();
   });
-  ss.on('end', done);
+  ss.once('end', done);
+  ss.once('error', done);
 
   pack.on('readable', BundleSaver({dir: output}));
-
   pack.once('end', function() {
-    ss.end();
+    //fs.renameSync(output + '/a.entry.js', output + '/a.entry.min.js');
+    fs.renameSync(output + '/1.js', output + '/1.min.js');
+    ss.end({
+      //'a.entry.js': 'a.entry.min.js',
+      '1.js': '1.min.js'
+    });
   });
-
   pack.once('error', done);
   pack.end(__dirname + '/a.js');
 };

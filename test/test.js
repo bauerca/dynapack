@@ -14,7 +14,7 @@ var File = require('vinyl');
 var open = require('open');
 
 describe('dynapack', function() {
-  it('should produce single bundle and entry', function(done) {
+  it('should produce single bundle', function(done) {
     var packer = dynapack();
     var mcount = 0;
     var bcount = 0;
@@ -29,7 +29,7 @@ describe('dynapack', function() {
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(bcount).to.be(2); // 1 entry, and 1 bundle
+      expect(bcount).to.be(1);
       done();
     });
 
@@ -51,7 +51,7 @@ describe('dynapack', function() {
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(bcount).to.be(5); // plus one entry.
+      expect(bcount).to.be(4);
       done();
     });
 
@@ -71,14 +71,14 @@ describe('dynapack', function() {
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(bcount).to.be(7);
+      expect(bcount).to.be(6);
       done();
     });
 
     packer.end(__dirname + '/diamond/a.js');
   });
 
-  it('should emit the graph', function(done) {
+  it('should emit the bundles', function(done) {
     var packer = dynapack();
 
     //var expectedGraph = JSON.parse(
@@ -92,13 +92,13 @@ describe('dynapack', function() {
     //  )
     //);
 
-    packer.on('bundled', function(graph) {
-      //console.log(JSON.stringify(graph, null, 2));
-      //expect(graph).to.eql(expectedGraph);
-      expect(Object.keys(graph.modules).length).to.be(6);
-      expect(Object.keys(graph.bundles).length).to.be(4);
-      expect(Object.keys(graph.entries).length).to.be(1);
-      expect(graph.entries.a.length).to.be(2);
+    packer.on('bundled', function(meta) {
+      //console.log(JSON.stringify(meta, null, 2));
+      //expect(meta).to.eql(expectedGraph);
+      expect(Object.keys(meta.modules).length).to.be(6);
+      expect(Object.keys(meta.bundles).length).to.be(4);
+      //expect(Object.keys(meta.entries).length).to.be(1);
+      //expect(meta.entries.a.length).to.be(2);
     });
 
     packer.once('error', done);
@@ -121,7 +121,7 @@ describe('dynapack', function() {
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(bcount).to.be(5);
+      expect(bcount).to.be(4);
       done();
     });
 
@@ -157,7 +157,7 @@ describe('dynapack', function() {
 
     packer.once('error', done);
     packer.once('end', function() {
-      expect(bcount).to.be(5);
+      expect(bcount).to.be(4);
       done();
     });
 
@@ -176,7 +176,7 @@ describe('dynapack', function() {
     pack.on('error', done);
 
     pack.on('end', function() {
-      expect(bcount).to.be(2);
+      expect(bcount).to.be(1);
       done();
     });
 
@@ -256,6 +256,38 @@ describe('dynapack', function() {
     pack.deps().pipe(pick).pipe(insertGlobals).pipe(pick).pipe(pack.mods());
   });
 
+  describe('scripts()', function() {
+    it('should use aliases', function(done) {
+      var packer = dynapack();
+      var bcount = 0;
+      var scripts = packer.scripts();
+
+      packer.on('readable', function() {
+        var bundle;
+
+        while (bundle = this.read()) {
+          bcount++;
+        }
+      });
+
+      scripts.on('data', function(scripts) {
+        var html = scripts.contents.toString();
+        expect(html).to.match(/min\.js/);
+      });
+      scripts.on('end', done);
+
+      packer.once('error', done);
+      packer.once('end', function() {
+        expect(bcount).to.be(4);
+        scripts.end({
+          'a.entry.js': 'a.entry.min.js',
+          '1.js': '1.min.js'
+        });
+      });
+
+      packer.end(__dirname + '/diamond/a.js');
+    });
+  });
 
   var server;
 
@@ -270,6 +302,7 @@ describe('dynapack', function() {
       debug: true,
       tests: [
         'diamond',
+        'aliases',
         'circular',
         'wrong-order',
         'simultaneous',

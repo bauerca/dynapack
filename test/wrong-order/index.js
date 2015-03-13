@@ -34,16 +34,17 @@ module.exports = function(app, done) {
   });
 
   var packer = Dynapack({prefix: iso.route + '/'});
+  var ss = packer.scripts();
+
+  ss.on('data', function(file) {
+    scripts = iso.iso + file.contents.toString();
+  });
+  ss.once('end', done);
+  ss.once('error', done);
 
   packer.on('readable', BundleSaver({dir: __dirname + '/bundles'}));
-  packer.once('end', done);
+  packer.once('end', ss.end.bind(ss));
   packer.once('error', done);
   packer.end(__dirname + '/main.js');
-
-  packer.on('bundled', function(graph) {
-    scripts = iso.iso + graph.entries.main.map(function(script) {
-      return '<script async src="' + packer.opts.prefix + script + '"></script>';
-    }).join('');
-  });
 };
 

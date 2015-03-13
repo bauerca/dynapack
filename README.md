@@ -162,8 +162,9 @@ It is composed of several streams that work in concert, where each stream accept
 emits vinyl File instances; they are
 
 - the dynapack (or entries/bundles) transform stream,
-- the dependency readable stream (deps), and
-- the modules writable stream (mods).
+- the dependency readable stream (deps),
+- the modules writable stream (mods), and
+- the scripts transform stream.
 
 File paths (and possibly their pre-loaded sources) for entry modules are
 pushed into dynapack by the user (e.g. for single-page apps, this would be main.js
@@ -177,15 +178,27 @@ deps and mods by using the [deps()](#deps) and [mods()](#mods) calls.
 When the mods stream stops being backlogged by new modules, dynapack runs the
 bundle-splitting algorithm and emits bundles (on the dynapack stream)
 along with the special
-`bundled` event, which outputs the bundle sets and entry dependency metadata.
+`bundled` event, which outputs the dependencies and bundle sets metadata.
 
-So, the easiest way to use it ignores the deps/mods business,
+Finally, the [scripts stream](#scripts) emits the client-side logic that ties all your bundles
+together. Each file from the scripts stream should be embedded directly in the
+HTML of the page that would serve the associated entry script. These HTML files
+are named according to the entry scripts; so, if you pushed `main.js` into dynapack,
+you would get `main.html` on the scripts stream.
+
+Here is the easiest way to use it (ignoring the deps/mods business),
 
 ```js
 var gulp = require('gulp');
 var dynapack = require('dynapack');
 
 var pack = dynapack();
+
+pack.on('end', function() {
+  var scripts = pack.scripts();
+  scripts.pipe(gulp.dest(__dirname + '/bundles'));
+  scripts.end();
+});
 
 pack.pipe(gulp.dest(__dirname + '/bundles'));
 pack.end(__dirname + '/main.js');
@@ -198,6 +211,12 @@ insert a transform stream (that handles vinyl files) in between deps and mods:
 ```js
 var transformer = new TransformStream( /* ... customize ... */);
 var pack = dynapack();
+
+pack.on('end', function() {
+  var scripts = pack.scripts();
+  scripts.pipe(gulp.dest(__dirname + '/bundles'));
+  scripts.end();
+});
 
 pack.deps().pipe(transformer).pipe(pack.mods()); // Intercept the flow.
 pack.pipe(gulp.dest(__dirname + '/bundles'));
@@ -265,6 +284,38 @@ stream again, either directly or via custom transform streams.
 
 Get the modules stream. You will need this if you call [deps()](#deps).
 
+#### scripts()
+
+Get the scripts stream. This stream emits an HTML file
+(as a [vinyl File](https://github.com/wearefractal/vinyl))
+for every entry
+script given to dynapack. The file contains the code that should be
+placed at the bottom of the body tag in the HTML file served with each entry script.
+
+Each HTML file
+is named according to its corresponding entry script; so, if you pushed `main.js` into dynapack,
+you would get `main.html` on the scripts stream.
+
+This is a transform stream, so you must call `end()` on it for it to finish. It
+behaves this way because you may want to alias your bundles (for example, if you've
+revved them). Push mappings between bundle files output by dynapack and their
+new names (aliases) like so:
+
+```js
+scripts.end({
+  "main.js": "main-3def45.min.js"
+});
+```
+
+Here is some sample output from the scripts stream using aliases:
+
+```
+<script>
+window["dynapackAliases"]={"1.js":"1.min.js"};
+!function(n,e,t){function o(n,e){for(var t in e)...blah blah blah...}("0",["1.js"],{"prefix":"/js/"});
+</script>
+<script async src="/js/1.min.js"></script>
+```
 
 ## Command line
 

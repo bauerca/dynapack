@@ -21,9 +21,12 @@ ENSURE_ID_SEP = ' ',
 // A mapping from bundle id to either 0 if the bundle is
 // currently downloading, or 1 if it has been downloaded and its modules
 // were loaded into `modules`.
-__bundles = 'dynapackBundles';
+__bundles = 'dynapackBundles',
 //bundles = {};
 
+// A mapping from dynapack-generated bundle id to custom id (such as in the
+// case of asset-revving.
+aliases = window['dynapackAliases'] || {};
 
 // The following is called everytime a bundle is downloaded AND this function
 // exists. Otherwise, the downloaded bundle data will simply be added to the
@@ -111,7 +114,7 @@ require.ensure = function(modules, callback) {
         var script = document.createElement('script');
         script.type = 'text/javascript';
         script.charset = 'utf-8';
-        script.src = (options.prefix || '/') + bundleId; // Bundle id includes .js
+        script.src = (options.prefix || '/') + (aliases[bundleId] || bundleId); // Bundle id includes .js
         head.appendChild(script);
       }
       // Can a require call occur while a bundle is in stasis? No, the
