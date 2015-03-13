@@ -381,7 +381,7 @@ Dynapack.prototype.scripts = function() {
       );
 
       function iterator(html, newBundleId, bundleId) {
-        return html.replace(bundleId, newBundleId);
+        return html.replace('"' + bundleId + '"', '"' + newBundleId + '"');
       }
     });
 
