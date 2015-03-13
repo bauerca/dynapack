@@ -228,7 +228,7 @@ Dynapack.prototype.bundle = function(opts) {
     }
   });
 
-  roots = pack.roots = Object.keys(roots);
+  roots = pack.roots = Object.keys(roots).sort();
   bundles = pack.bundles = {};
   ids = pack.ids = {};
 
@@ -280,6 +280,7 @@ Dynapack.prototype.bundle = function(opts) {
    */
 
   forEach(bundles, function(bundle) {
+    bundle.modules.sort();
     graph.bundles[bundle.id] = bundle.modules.concat();
 
     if (bundle.render) {
