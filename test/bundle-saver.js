@@ -10,11 +10,16 @@ var mkdirp = require('mkdirp');
  */
 
 function BundleSaver(opts) {
-  return function() {
+  var bundles = saveBundle.bundles = [];
+
+  return saveBundle;
+
+  function saveBundle() {
     var bundle;
     var file;
 
     while (bundle = this.read()) {
+      bundles.push(bundle);
       file = opts.dir + '/' + bundle.relative;
       mkdirp.sync(
         path.dirname(file)

@@ -40,6 +40,7 @@ module.exports = function(app, done) {
   });
 
   var ss = pack.scripts();
+  var saveBundle = BundleSaver({dir: output});
 
   ss.on('data', function(file) {
     scripts = file.contents.toString();
@@ -47,14 +48,20 @@ module.exports = function(app, done) {
   ss.once('end', done);
   ss.once('error', done);
 
-  pack.on('readable', BundleSaver({dir: output}));
+  pack.on('readable', saveBundle);
   pack.once('end', function() {
     //fs.renameSync(output + '/a.entry.js', output + '/a.entry.min.js');
-    fs.renameSync(output + '/1.js', output + '/1.min.js');
-    ss.end({
+    var orig = saveBundle.bundles[0].relative;
+    var min = saveBundle.bundles[0].relative.replace(/js$/, 'min.js');
+    var aliases = {};
+
+    aliases[orig] = min;
+    fs.renameSync(output + '/' + orig, output + '/' + min);
+      //output + '/1.js', output + '/1.min.js');
+    ss.end(aliases);
       //'a.entry.js': 'a.entry.min.js',
-      '1.js': '1.min.js'
-    });
+      //'1.js': '1.min.js'
+    //});
   });
   pack.once('error', done);
   pack.end(__dirname + '/a.js');

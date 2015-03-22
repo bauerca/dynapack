@@ -37,7 +37,8 @@
     "open": "0.0.5",
     "osh-iso-test": "^0.1.0",
     "parseurl": "~1.0.1",
-    "serve-static": "^1.7.0"
+    "serve-static": "^1.7.0",
+    "stream-to-array": "^2.0.2"
   },
   "scripts": {
     "test": "mocha -C"

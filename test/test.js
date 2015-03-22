@@ -1,4 +1,5 @@
 var dynapack = require('../');
+var mkdirp = require('mkdirp');
 var through = require('through2');
 var expect = require('expect.js');
 var express = require('express');
@@ -12,6 +13,7 @@ var iso = require('osh-iso-test');
 var through2 = require('through2');
 var File = require('vinyl');
 var open = require('open');
+var toArray = require('stream-to-array');
 
 describe('dynapack', function() {
   it('should produce single bundle', function(done) {
@@ -130,6 +132,59 @@ describe('dynapack', function() {
     packer.end();
   });
 
+  it('should preserve bundle name when only content of bundle changes', function(done) {
+    var originalBundle;
+    var dir = __dirname + '/preserve-bname';
+
+    mkdirp.sync(dir);
+
+    async.series(
+      [packOriginal, packModified],
+      done
+    );
+
+    function packOriginal(done) {
+      var pack = dynapack();
+
+      fs.writeFileSync(dir + '/dep.js', 'var a = "hello";');
+
+      toArray(pack, function(err, array) {
+        expect(array.length).to.be(2);
+        originalBundle = array[1];
+        done(err);
+      });
+
+      pack.on('error', done);
+      send(pack);
+    }
+
+    function packModified(done) {
+      var pack = dynapack();
+
+      fs.writeFileSync(dir + '/dep.js', 'var a = "goodbye";');
+
+      toArray(pack, function(err, array) {
+        var bundle = array[1];
+        expect(array.length).to.be(2);
+        expect(bundle.relative).to.be(originalBundle.relative);
+        expect(bundle.contents.toString()).to.not.be(originalBundle.contents.toString());
+        done(err);
+      });
+
+      pack.on('error', done);
+      send(pack);
+    }
+
+    function send(pack) {
+      pack.end(
+        new File({
+          path: dir + '/entry.js',
+          contents: new Buffer('"./dep"/*js*/;')
+        })
+      );
+    }
+  });
+
   /**
    *  Bundle the diamond, then "change" the base of the diamond by
    *  resubmitting d.js to the pack. Only the d.js-containing bundle
@@ -167,15 +222,24 @@ describe('dynapack', function() {
 
   it('should handle entry source', function(done) {
     var pack = dynapack();
+    var scripts = pack.scripts();
     var bcount = 0;
+    var scount = 0;
 
     pack.on('readable', function() {
       while (this.read()) {bcount++}
     });
-
     pack.on('error', done);
-
     pack.on('end', function() {
+      scripts.end();
+    });
+
+    scripts.on('readable', function() {
+      while (this.read()) {scount++}
+    });
+    scripts.on('error', done);
+    scripts.on('end', function() {
+      expect(scount).to.be(1);
       expect(bcount).to.be(1);
       done();
     });
@@ -186,8 +250,6 @@ describe('dynapack', function() {
         contents: new Buffer('module.exports=function(){};')
       })
     );
-
-    pack.resume();
   });
 
   it('should not error on bad js', function(done) {

@@ -1,9 +1,11 @@
+var crypto = require('crypto');
 var builtins = require('browserify/lib/builtins');
 var fs = require('fs');
 var path = require('path');
 var forEach = require('lodash/collection/forEach');
 var sum = require('lodash/collection/sum');
 var reduce = require('lodash/collection/reduce');
+var pluck = require('lodash/collection/pluck');
 var union = require('lodash/array/union');
 var last = require('lodash/array/last');
 var pull = require('lodash/array/pull');
@@ -121,33 +123,31 @@ Dynapack.prototype.traverse = function(iterator) {
 
 Dynapack.prototype.renderBundle = function(bundle) {
   var pack = this;
-  var bundleRoots = pack.getBundleRoots(bundle.id);
-
-  // Re-id bundleRoots
-  for (var rootPath in bundleRoots) {
-    bundleRoots[pack.ids[rootPath]] = bundleRoots[rootPath];
-    delete bundleRoots[rootPath];
-  }
+  var newRoots = {};
+  
+  forEach(pack.getBundleNewRoots(bundle), function(rootBundles, rootPath) {
+    newRoots[pack.ids[rootPath]] = pluck(rootBundles, 'name');
+  });
 
   if (!pack.bundleHeader) {
     pack.bundleHeader = fs.readFileSync(__dirname + '/browser/bundle.js');
   }
 
   return (
-    pack.bundleHeader + '("' + bundle.id + '", [{' +
+    pack.bundleHeader + '("' + bundle.name + '", [{' +
     bundle.modules.map(function(path) {
       return (
         '"' + pack.ids[path] + '":' +
         pack.renderModule(path)
       );
     }).join(',') + '},' +
-    JSON.stringify(bundleRoots) +
+    JSON.stringify(newRoots) +
     ']);'
   );
 };
 
 /**
- *  @param {String} modPath Module id; it better be from dynapack.entries sucka.
+ *  @param {String} entryPath Module path; it better be from dynapack.entries sucka.
  */
 
 Dynapack.prototype.renderEntry = function(entryPath, bundles) {
@@ -158,7 +158,9 @@ Dynapack.prototype.renderEntry = function(entryPath, bundles) {
   return (
     this._entryHeader +
     '("' + this.ids[entryPath] + '",' +
-    JSON.stringify(bundles) + ',' +
+    JSON.stringify(
+      pluck(bundles, 'name')
+    ) + ',' +
     JSON.stringify({
       prefix: this.opts.prefix || '/'
     }) +
@@ -175,8 +177,8 @@ Dynapack.prototype.entryScripts = function(entryName) {
   var scripts = '';
   //var scripts = '<script async src="' + prefix + entryName + '.entry.js"></script>';
 
-  entryBundles.forEach(function(bundleId) {
-    scripts += '<script async src="' + prefix + bundleId + '"></script>';
+  entryBundles.forEach(function(bundle) {
+    scripts += '<script async src="' + prefix + bundle.name + '"></script>';
   });
 
   return scripts;
@@ -189,6 +191,7 @@ Dynapack.prototype.bundle = function(opts) {
   var bundle;
   var bundles;
   var index = 0;
+  var cwd = process.cwd();
 
   // Graph metadata all in one place.
   var graph = {
@@ -197,9 +200,24 @@ Dynapack.prototype.bundle = function(opts) {
     entries: {}  // maps entry ids to bundle id arrays.
   };
 
+    // Consistent id'ing of modules uses its relative path. Watch out
+    // for dependencies that go outside project directory.
+
   var basePath = commondir(
     Object.keys(pack.modules)
   );
+
+  if (cwd.indexOf(basePath) === 0 && cwd.length > basePath.length) {
+    // basePath is a parent directory of cwd
+    console.warn(
+      'The directory common to all modules in the dependency',
+      'graph is', basePath, ', but the current working directory',
+      'is', cwd + '.', 'If you are working from the root of your',
+      'project directory, this means your bundle names may vary',
+      'depending on your development machine, which is bad. Maybe',
+      'a global module is being required somehow?'
+    );
+  }
 
   pack.traverse(function(visited) {
     var module = last(visited);
@@ -239,11 +257,14 @@ Dynapack.prototype.bundle = function(opts) {
   forEach(pack.modules, function(module) {
     var bundle;
     var bundleId;
+    var relPath = module.path.slice(basePath.length + 1); // remove leading slash.
+
+    // Consistent id'ing of modules uses its relative path.
 
     ids[module.path] = (
       pack.opts.debug ?
-        module.path.slice(basePath.length + 1) : // remove leading slash.
-        module.index.toString()
+        relPath :
+        crypto.createHash('md5').update(relPath).digest('hex').slice(0, 8)
     );
 
     graph.modules[ids[module.path]] = module.path;
@@ -276,17 +297,24 @@ Dynapack.prototype.bundle = function(opts) {
   });
 
   /**
-   *  Push only the bundles that need to be rendered.
+   *  Give names to all the bundles.
    */
 
   forEach(bundles, function(bundle) {
     bundle.modules.sort();
+    bundle.name = pack.ids[pack.getBundleRoot(bundle)].replace(/\.js$/, '') + '.js';
     graph.bundles[bundle.id] = bundle.modules.concat();
+  });
 
+  /**
+   *  Push only the bundles that need to be rendered.
+   */
+
+  forEach(bundles, function(bundle) {
     if (bundle.render) {
       pack.push(
         new File({
-          path: path.join(process.cwd(), bundle.id),
+          path: path.join(process.cwd(), bundle.name),
           base: process.cwd(),
           modules: bundle.modules,
           contents: new Buffer(
@@ -331,6 +359,32 @@ Dynapack.prototype.bundle = function(opts) {
 
   pack.emit('bundled', graph);
 };
+
+/**
+ *  A bundle root is defined as the path of the module that
+ *  is contained in the bundle that is not a static dependency of any other
+ *  module in the same bundle; i.e. the root of the bundle graph.
+ */
+
+Dynapack.prototype.getBundleRoot = function(bundle) {
+  var pack = this;
+  var roots = bundle.modules.concat();
+
+  bundle.modules.forEach(function(modulePath) {
+    var module = pack.modules[modulePath];
+
+    module.deps.static.forEach(function(depPath) {
+      pull(roots, depPath);
+    });
+  });
+
+  if (roots.length !== 1) {
+    throw new Error('Bundle has more than one root! How?', roots);
+  }
+
+  return roots[0];
+};
+
 
 /**
  *  Return a stream that receives a mapping between dynapack-generated
@@ -653,12 +707,12 @@ function replaceAllString(src, remove, insert) {
 
 
 /**
- *  When a module is required asynchronously, all of the bundles on
- *  which it depends (statically) must be downloaded immediately by
- *  the client. This function
- *  finds those bundles given a root module. We could gather this
- *  information on the fly as modules are read from module-deps, but
- *  oh well.
+ *  When a module is required asynchronously, all of the bundles on which it
+ *  depends (statically) must be downloaded immediately by the client. This
+ *  function finds those bundles given a root module.
+ *
+ *  @returns {Array<Bundle>} The set of bundles required by the given
+ *  root module.
  */
 
 Dynapack.prototype.requiredBundles = function(rootPath) {
@@ -675,7 +729,7 @@ Dynapack.prototype.requiredBundles = function(rootPath) {
     var module = pack.modules[bundle.modules[0]];
 
     if (module.roots.indexOf(rootPath) >= 0) {
-      required.push(bundle.id);
+      required.push(bundle);
     }
   });
 
@@ -707,16 +761,17 @@ Dynapack.prototype.renderModule = function(path) {
 /**
  *  A bundle brings with it a set of dynamic deps (roots).  The client must be
  *  informed of the new bundles these dynamic deps would introduce if
- *  asynchronously required.  'roots' is a mapping from root module id to an
+ *  asynchronously required.  'roots' is a mapping from root module path to an
  *  array of bundles.
  *
- *  @param {String} bundleId
+ *  @param {Bundle} bundle
+ *
+ *  @returns {Object<String, Bundle>}
  */
 
-Dynapack.prototype.getBundleRoots = function(bundleId) {
+Dynapack.prototype.getBundleNewRoots = function(bundle) {
   var pack = this;
   var roots = {};
-  var bundle = pack.bundles[bundleId];
 
   bundle.modules.forEach(function(path) {
     var module = pack.modules[path];
