@@ -1,4 +1,3 @@
-var crypto = require('crypto');
 var builtins = require('browserify/lib/builtins');
 var fs = require('fs');
 var path = require('path');
@@ -11,6 +10,7 @@ var last = require('lodash/array/last');
 var pull = require('lodash/array/pull');
 var assign = require('lodash/object/assign');
 var encodeBits = require('./lib/encode-bits');
+var md5 = require('./lib/md5');
 var commondir = require('commondir');
 var Module = require('./lib/module');
 var inherits = require('inherits');
@@ -261,12 +261,7 @@ Dynapack.prototype.bundle = function(opts) {
 
     // Consistent id'ing of modules uses its relative path.
 
-    ids[module.path] = (
-      pack.opts.debug ?
-        relPath :
-        crypto.createHash('md5').update(relPath).digest('hex').slice(0, 8)
-    );
-
+    ids[module.path] = pack.opts.debug ? relPath : md5(relPath);
     graph.modules[ids[module.path]] = module.path;
 
     // Push module into a bundle based on its roots.
@@ -275,11 +270,8 @@ Dynapack.prototype.bundle = function(opts) {
       pack.opts.debug ?
       ids[module.path] :
       (
-        encodeBits(
-          module.roots.map(function(rootPath) {
-            return roots.indexOf(rootPath);
-          }),
-          32
+        md5(
+          module.roots.sort().join('')
         ) +
         '.js'
       )
@@ -297,12 +289,13 @@ Dynapack.prototype.bundle = function(opts) {
   });
 
   /**
-   *  Give names to all the bundles.
+   *  Sort modules in all bundles and name the bundle by its contents
+   *  before rendering.
    */
 
   forEach(bundles, function(bundle) {
     bundle.modules.sort();
-    bundle.name = pack.ids[pack.getBundleRoot(bundle)].replace(/\.js$/, '') + '.js';
+    bundle.name = md5(bundle.modules.join(''), 8) + '.js';
     graph.bundles[bundle.id] = bundle.modules.concat();
   });
 
@@ -366,7 +359,7 @@ Dynapack.prototype.bundle = function(opts) {
  *  module in the same bundle; i.e. the root of the bundle graph.
  */
 
-Dynapack.prototype.getBundleRoot = function(bundle) {
+Dynapack.prototype.setBundleName = function(bundle) {
   var pack = this;
   var roots = bundle.modules.concat();
 

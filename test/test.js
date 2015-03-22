@@ -314,10 +314,6 @@ describe('dynapack', function() {
     pack.resume();
   });
 
-  xit('should be simple to use with browserify transforms?', function(done) {
-    pack.deps().pipe(pick).pipe(insertGlobals).pipe(pick).pipe(pack.mods());
-  });
-
   describe('scripts()', function() {
     it('should use aliases', function(done) {
       var packer = dynapack();
