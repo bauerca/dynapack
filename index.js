@@ -259,6 +259,8 @@ Dynapack.prototype.bundle = function(opts) {
     var bundleId;
     var relPath = module.path.slice(basePath.length + 1); // remove leading slash.
 
+    module.relPath = relPath;
+
     // Consistent id'ing of modules uses its relative path.
 
     ids[module.path] = pack.opts.debug ? relPath : md5(relPath);
@@ -298,6 +300,58 @@ Dynapack.prototype.bundle = function(opts) {
     bundle.name = md5(bundle.modules.join(''), 8) + '.js';
     graph.bundles[bundle.id] = bundle.modules.concat();
   });
+
+
+  /**
+   *  Output the graph if we have graphviz.
+   */
+
+  try {
+    var graphviz = require('graphviz');
+    var g = graphviz.digraph('app');
+    var bundleColors = {};
+    var currentColor = 0;
+    var colorscheme = 'brbg9';
+
+    forEach(pack.bundles, function(bundle) {
+      var color = ((currentColor++ % 10) + 1).toString();
+      forEach(bundle.modules, function(path) {
+        var module = pack.modules[path];
+        var n = g.addNode(module.relPath, {
+          colorscheme: colorscheme,
+          color: color,
+          style: 'filled'
+        });
+      });
+    });
+
+    forEach(pack.modules, function(module) {
+      module.deps.static.forEach(function(depPath) {
+        var dep = pack.modules[depPath];
+        var edge = g.addEdge(module.relPath, dep.relPath);
+
+        edge.set('style', 'solid');
+      });
+
+      module.deps.dynamic.forEach(function(depPath) {
+        var dep = pack.modules[depPath];
+        var edge = g.addEdge(module.relPath, dep.relPath);
+
+        edge.set('style', 'dashed');
+      });
+    });
+
+    fs.writeFileSync('dependency-graph.dot', g.to_dot());
+
+    g.output(
+      'png',
+      path.resolve(process.cwd(), 'dependency-graph.png')
+    );
+  }
+  catch (e) {
+    console.log(e.message);
+  }
+
 
   /**
    *  Push only the bundles that need to be rendered.
