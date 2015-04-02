@@ -341,12 +341,7 @@ Dynapack.prototype.bundle = function(opts) {
       });
     });
 
-    fs.writeFileSync('dependency-graph.dot', g.to_dot());
-
-    g.output(
-      'png',
-      path.resolve(process.cwd(), 'dependency-graph.png')
-    );
+    pack.emit('graph', g);
   }
   catch (e) {
     console.log(e.message);
