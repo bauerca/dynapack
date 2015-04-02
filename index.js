@@ -311,13 +311,17 @@ Dynapack.prototype.bundle = function(opts) {
     var g = graphviz.digraph('app');
     var bundleColors = {};
     var currentColor = 0;
-    var colorscheme = 'brbg11';
+    var graphOpts = pack.opts.graph || {};
+    var colorscheme = graphOpts.colorscheme || 'brbg11';
 
     forEach(pack.bundles, function(bundle) {
       var color = ((currentColor++ % 11) + 1).toString();
+      var cluster = g.addCluster('"cluster-' + bundle.name + '"');
+
       forEach(bundle.modules, function(path) {
         var module = pack.modules[path];
-        var n = g.addNode(module.relPath, {
+        var n = cluster.addNode(module.relPath, {
+          //group: bundle.id,
           colorscheme: colorscheme,
           color: color,
           style: 'filled'
